@@ -4,8 +4,8 @@ import jax
 import jax.numpy as jnp
 
 
-def slater_x(r, rho):
-    e_x = - 3 * np.pi * (3 / np.pi) ** (1 / 3) * scipy.integrate.simpson(rho ** (4 / 3) * r ** 2, r)
+def slater_x(x, r, rho):
+    e_x = - 3 * np.pi * (3 / np.pi) ** (1 / 3) * scipy.integrate.simpson(rho ** (4 / 3) * r ** 3, x)
     v_x = -(3 / np.pi) ** (1 / 3) * rho ** (1 / 3)
     return e_x, v_x
 
@@ -34,11 +34,11 @@ def epsilon_vwn(rs):
 grad_epsilon_vwn = jax.vmap(jax.value_and_grad(epsilon_vwn))
 
 
-def vwn_xc(r, rho):
+def vwn_xc(x, r, rho):
     rho = jnp.where(rho < 1e-12, 1e-12, rho)
     rs = (3 / (4 * jnp.pi * rho)) ** (1 / 3)
 
     epsilon, grad_epsilon = grad_epsilon_vwn(rs)
-    e_xc = 4 * np.pi * scipy.integrate.simpson(rho * epsilon * r ** 2, r)
+    e_xc = 4 * np.pi * scipy.integrate.simpson(rho * epsilon * r ** 3, x)
     v_xc = epsilon - (rs / 3) * grad_epsilon
     return np.array(e_xc), np.array(v_xc)

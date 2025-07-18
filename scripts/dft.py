@@ -2,138 +2,158 @@ import numpy as np
 import scipy
 import matplotlib.pyplot as plt
 
-from utils import generate_occupations
+from utils import generate_occupations, occupation_string
 from functionals import slater_x, vwn_xc
 
 
 class SingleAtomDFT:
-    def __init__(self, z, occupations, r_max, n_grid, xc_functional=None):
+    def __init__(self, z, r_min, r_max, n_grid, occupations=None, xc_functional=None):
         self.z = z
-        self.occupations = occupations
+        if occupations is None:
+            self.occupations = generate_occupations(z)
+        else:
+            self.occupations = occupation_string(occupations)
         # simpson rule works better with uneven number of samples
         if n_grid % 2 == 0:
             n_grid = n_grid + 1
-        self.r = np.linspace(1e-7, r_max, n_grid)
-        self.h = r_max / (n_grid - 1)
+        self.x = np.linspace(np.log(r_min), np.log(r_max), n_grid)
+        self.dx = (self.x[-1] - self.x[0]) / (n_grid - 1)
+        self.r = np.exp(self.x)
         self.rho = np.zeros_like(self.r)
-        self.e_total = None
         self.xc_functional = xc_functional
         if xc_functional is None:
             self.xc_functional = slater_x
+        self.e_kin = None
+        self.e_ext = None
+        self.e_xc = None
+        self.e_hartree = None
+        self.e_total = None
 
     def get_v_external(self):
-        e_ext = -4 * np.pi * self.z * scipy.integrate.simpson(self.rho * self.r, self.r)
+        e_ext = -4 * np.pi * self.z * scipy.integrate.simpson(self.rho * self.r ** 2, self.x)
         v_ext = -self.z / self.r
         return e_ext, v_ext
 
     def get_v_hartree(self):
-        u_diagonal = np.full(self.r.shape[0], -2 / self.h ** 2)
-        u_off = np.full(self.r.shape[0] - 1, 1 / self.h ** 2)
-        rhs = -4 * np.pi * self.rho * self.r
-
-        u_diagonal[0] = 1
-        u_off[0] = 0
-        rhs[0] = 0
-
-        u_diagonal[-1] = 1
-        u_off[-1] = 0
-        rhs[-1] = sum(map(sum, self.occupations))
-
-        # solve banded matrix
-        ab = np.zeros(shape=(3, self.r.shape[0]))
-        ab[0, 1:] = u_off
-        ab[1] = u_diagonal
-        ab[2, :-1] = u_off
-        u = scipy.linalg.solve_banded((1, 1), ab, rhs)
-        v_hartree = u / self.r
-        v_hartree[0] = v_hartree[1]
-
-        e_hartree = 2 * np.pi * scipy.integrate.simpson(v_hartree * self.rho * self.r ** 2, self.r)
+        integral_inner = scipy.integrate.cumulative_simpson(self.rho * self.r ** 3, dx=self.dx, initial=0) / self.r
+        integral_outer = scipy.integrate.cumulative_simpson((self.rho * self.r ** 2)[::-1], dx=self.dx, initial=0)[::-1]
+        v_hartree = 4 * np.pi * (integral_inner + integral_outer)
+        e_hartree = 2 * np.pi * scipy.integrate.simpson(v_hartree * self.rho * self.r ** 3, self.x)
         return e_hartree, v_hartree
 
     def solve_ks(self, l, v_eff):
-        u_diagonal = 1 / self.h ** 2 + l * (l + 1) / (2 * self.r ** 2) + v_eff
-        u_off = np.full(self.r.shape[0] - 1, - 1 / (2 * self.h ** 2))
-        u_diagonal[0] = 1
-        u_diagonal[-1] = 1
-        u_off[0] = 0
-        u_off[-1] = 0
+        # solve generalized hermitian eigenvalue problem A * chi = epsilon * B * chi
+        # with diagonal matrix B
+        a_diagonal = 1 / self.dx ** 2 + 1 / 8 + l * (l + 1) / 2 + self.r ** 2 * v_eff
+        a_off = np.full(self.r.shape[0] - 1, - 1 / (2 * self.dx ** 2))
+        b = self.r ** 2
 
-        values, vectors = scipy.linalg.eigh_tridiagonal(u_diagonal, u_off)
+        # Neumann BC: chi'(x_min) = (l+1/2) * chi(x_min)
+        a_diagonal[0] += (l + 0.5) / self.dx
+        a_diagonal[0] /= 2
+        b[0] /= 2
 
-        n_vectors = len(self.occupations[l])
-        eigen_values = values[:n_vectors]
-        eigen_vectors = np.empty(shape=(n_vectors, self.r.shape[0]))
-        for n in range(n_vectors):
-            psi = vectors[:, n]
-            psi[0] = 0
-            psi[-1] = 0
-            norm = scipy.integrate.simpson(psi ** 2, self.r)
-            eigen_vectors[n] = psi / np.sqrt(norm)
-        return eigen_values, eigen_vectors
+        # C = B^(-1/2) * A * B^(-1/2)
+        c_diagonal = a_diagonal / b
+        c_off = a_off / np.sqrt(b[:-1] * b[1:])
 
-    def construct_rho(self, vectors, mixing=0.7):
+        # solve eigenvalue problem C * y = epsilon * y for first n eigenvalues
+        # remove last values for Dirichlet boundary conditions
+        occupation = len(self.occupations[l])
+
+        epsilon, y = scipy.linalg.eigh_tridiagonal(c_diagonal[:-1], c_off[:-1], select="i",
+                                                   select_range=(0, occupation - 1))
+
+        # transform back to chi and append zeros for boundary
+        chi = np.zeros(shape=(self.r.shape[0], occupation))
+        chi[:-1] = y / np.sqrt(b[:-1, np.newaxis])
+        # transform back to u
+        u = chi * np.sqrt(self.r)[:, np.newaxis]
+
+        # normalize u
+        for n in range(occupation):
+            norm = scipy.integrate.simpson(u[:, n] ** 2 * self.r, self.x)
+            u[:, n] /= np.sqrt(norm)
+        return epsilon, u
+
+    def construct_rho(self, eigen_vectors):
         new_rho = np.zeros_like(self.rho)
         for l in range(len(self.occupations)):
             for n in range(len(self.occupations[l])):
-                new_rho += self.occupations[l][n] * vectors[l][n] ** 2
+                new_rho += self.occupations[l][n] * eigen_vectors[l][:, n] ** 2
         new_rho /= (4 * np.pi * self.r ** 2)
-        # linear extrapolation
-        new_rho[0] = 2 * new_rho[1] - new_rho[2]
-        self.rho = mixing * self.rho + (1 - mixing) * new_rho
+        return new_rho
 
     def kinetic_energy(self, eigen_values, v_eff):
         eigen_sum = 0
         for l in range(len(self.occupations)):
             for n in range(len(self.occupations[l])):
                 eigen_sum += self.occupations[l][n] * eigen_values[l][n]
-        return eigen_sum - 4 * np.pi * scipy.integrate.simpson(v_eff * self.rho * self.r ** 2, self.r)
+        return eigen_sum - 4 * np.pi * scipy.integrate.simpson(v_eff * self.rho * self.r ** 3, self.x)
 
     def electron_count(self):
-        return 4 * np.pi * scipy.integrate.simpson(self.rho * self.r ** 2, self.r)
+        return 4 * np.pi * scipy.integrate.simpson(self.rho * self.r ** 3, self.x)
 
-    def run_scf(self, convergence=1e-5, max_iterations=100):
+    def run_scf(self, e_tol=1e-5, rho_tol=1e-3, max_iter=100, min_iter=5):
         v_eff = np.zeros_like(self.r)
-        for i in range(max_iterations):
+        for i in range(max_iter):
             print(f"Iteration {i}")
+
+            # get eigen values and vectors for each l
             eigen_values, eigen_vectors = list(), list()
             for l in range(len(self.occupations)):
                 values_l, vectors_l = self.solve_ks(l, v_eff)
                 eigen_values.append(values_l)
                 eigen_vectors.append(vectors_l)
+            print(f"\tε: {[a.tolist() for a in eigen_values]}")
+
+            # new rho and mixing
+            new_rho = self.construct_rho(eigen_vectors)
+            rho_diff = np.linalg.norm(new_rho - self.rho)
             if i == 0:
-                self.construct_rho(eigen_vectors, mixing=0)
+                self.rho = new_rho
             else:
-                self.construct_rho(eigen_vectors)
+                self.rho = 0.7 * self.rho + 0.3 * new_rho
 
-            e_ext, v_ext = self.get_v_external()
-            e_hartree, v_hartree = self.get_v_hartree()
-            e_xc, v_xc = self.xc_functional(self.r, self.rho)
+            # get energies and v_eff with new rho
+            self.e_ext, v_ext = self.get_v_external()
+            self.e_hartree, v_hartree = self.get_v_hartree()
+            self.e_xc, v_xc = self.xc_functional(self.x, self.r, self.rho)
             v_eff = v_ext + v_xc + v_hartree
-            e_kin = self.kinetic_energy(eigen_values, v_eff)
-            e_total = e_kin + e_ext + e_xc + e_hartree
-            print(f"\tElectrons: {self.electron_count(): .5g}\n"
-                  f"\tE_kinetic: {e_kin: .5g}\n"
-                  f"\tE_hartree: {e_hartree: .5g}\n"
-                  f"\tE_nucleus: {e_ext: .5g}\n"
-                  f"\tE_xc     : {e_xc: .5g}\n"
-                  f"\tE_total  : {e_total: .5g}")
+            self.e_kin = self.kinetic_energy(eigen_values, v_eff)
+            new_e_total = self.e_kin + self.e_ext + self.e_xc + self.e_hartree
             if self.e_total is not None:
-                print(f"\tDelta    : {e_total - self.e_total: .5g}")
+                e_total_diff = np.abs(self.e_total - new_e_total)
+            else:
+                e_total_diff = None
+            self.e_total = new_e_total
 
-            if self.e_total is not None and np.abs(e_total - self.e_total) < convergence:
-                print("Reached desired convergence.")
-                return e_total, e_kin, e_hartree, e_ext, e_xc, i
-            self.e_total = e_total
+            print(f"\tElectrons: {self.electron_count(): .5g}\n"
+                  f"\tE_kinetic: {self.e_kin: .5g}\n"
+                  f"\tE_hartree: {self.e_hartree: .5g}\n"
+                  f"\tE_nucleus: {self.e_ext: .5g}\n"
+                  f"\tE_xc     : {self.e_xc: .5g}\n"
+                  f"\tE_total  : {self.e_total: .5g}")
+            if e_total_diff is not None:
+                print(f"\tDelta E  : {e_total_diff: .5g}")
+
+            # check convergence criteria
+            if i >= min_iter and rho_diff < rho_tol and e_total_diff < e_tol:
+                print(f"Reached desired convergence. (rho = {rho_diff:.5g}, E = {e_total_diff:.5g})")
+                return i
         print("Maximum number of iterations reached.")
 
 
 if __name__ == "__main__":
-    dft = SingleAtomDFT(8, generate_occupations(8), 30, 3001, vwn_xc)
+    dft = SingleAtomDFT(8, 1e-4, 100, 3001, xc_functional=vwn_xc)
     dft.run_scf()
+
+    ref_r = np.linspace(0, 5, 1000)
+    ref_rho = np.exp(-2 * ref_r) / np.pi
 
     fig, ax = plt.subplots()
     ax.plot(dft.r, dft.rho)
+    ax.plot(ref_r, ref_rho)
     ax.set(xlabel=r"r", ylabel=r"rho", xlim=[-0.1, 5.1])
     ax.grid()
     plt.show()
