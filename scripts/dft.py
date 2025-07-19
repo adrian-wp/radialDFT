@@ -23,11 +23,15 @@ class SingleAtomDFT:
         self.xc_functional = xc_functional
         if xc_functional is None:
             self.xc_functional = slater_x
+        # used to access energies after completing SCF loop
         self.e_kin = None
         self.e_ext = None
         self.e_xc = None
         self.e_hartree = None
         self.e_total = None
+        # histories used for pulay mixing
+        self.densities = list()
+        self.residuals = list()
 
     def get_v_external(self):
         e_ext = -4 * np.pi * self.z * scipy.integrate.simpson(self.rho * self.r ** 2, self.x)
@@ -84,6 +88,26 @@ class SingleAtomDFT:
         new_rho /= (4 * np.pi * self.r ** 2)
         return new_rho
 
+    def pulay_mixing(self, new_rho, steps=5):
+        self.densities.append(new_rho)
+        self.residuals.append(new_rho - self.rho)
+        if len(self.residuals) >= steps:
+            last_residuals = np.array(self.residuals[-steps:])
+            weights = self.r ** 3
+            weighted_residuals = last_residuals * weights[np.newaxis, :]
+            overlap = np.full(shape=(steps + 1, steps + 1), fill_value=-1.0)
+            overlap[:steps, :steps] = weighted_residuals @ last_residuals.T
+            overlap[-1, -1] = 0
+            rhs = np.zeros(steps + 1)
+            rhs[-1] = -1
+            coefficients = np.linalg.solve(overlap, rhs)[:-1]
+            last_densities = np.array(self.densities[-steps:])
+            return np.vecdot(last_densities, coefficients, axis=0)
+        elif len(self.residuals) > 1:
+            return self.rho * 0.8 + new_rho * 0.2
+        else:
+            return new_rho
+
     def kinetic_energy(self, eigen_values, v_eff):
         eigen_sum = 0
         for l in range(len(self.occupations)):
@@ -110,10 +134,7 @@ class SingleAtomDFT:
             # new rho and mixing
             new_rho = self.construct_rho(eigen_vectors)
             rho_diff = np.linalg.norm(new_rho - self.rho)
-            if i == 0:
-                self.rho = new_rho
-            else:
-                self.rho = 0.7 * self.rho + 0.3 * new_rho
+            self.rho = self.pulay_mixing(new_rho)
 
             # get energies and v_eff with new rho
             self.e_ext, v_ext = self.get_v_external()
@@ -140,12 +161,13 @@ class SingleAtomDFT:
             # check convergence criteria
             if i >= min_iter and rho_diff < rho_tol and e_total_diff < e_tol:
                 print(f"Reached desired convergence. (rho = {rho_diff:.5g}, E = {e_total_diff:.5g})")
-                return i
+                return True, i
         print("Maximum number of iterations reached.")
+        return False, max_iter
 
 
 if __name__ == "__main__":
-    dft = SingleAtomDFT(8, 1e-4, 100, 3001, xc_functional=vwn_xc)
+    dft = SingleAtomDFT(1, 1e-4, 100, 3001, xc_functional=vwn_xc)
     dft.run_scf()
 
     ref_r = np.linspace(0, 5, 1000)
