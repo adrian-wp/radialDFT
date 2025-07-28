@@ -1,14 +1,14 @@
 import numpy as np
 import scipy
-import matplotlib.pyplot as plt
 
 from utils import generate_occupations, occupation_string
 from functionals import slater_x, vwn_xc
 
 
 class SingleAtomDFT:
-    def __init__(self, z, r_min, r_max, n_grid, occupations=None, xc_functional=None):
+    def __init__(self, z, r_min, r_max, n_grid, xc_functional=None, occupations=None):
         self.z = z
+        # occupation string
         if occupations is None:
             self.occupations = generate_occupations(z)
         else:
@@ -100,9 +100,9 @@ class SingleAtomDFT:
             overlap[-1, -1] = 0
             rhs = np.zeros(steps + 1)
             rhs[-1] = -1
-            coefficients = np.linalg.solve(overlap, rhs)[:-1]
+            coefficients = scipy.linalg.solve(overlap, rhs)[:-1]
             last_densities = np.array(self.densities[-steps:])
-            return np.vecdot(last_densities, coefficients, axis=0)
+            return np.tensordot(last_densities, coefficients, (0, 0))
         elif len(self.residuals) > 1:
             return self.rho * 0.8 + new_rho * 0.2
         else:
@@ -129,7 +129,6 @@ class SingleAtomDFT:
                 values_l, vectors_l = self.solve_ks(l, v_eff)
                 eigen_values.append(values_l)
                 eigen_vectors.append(vectors_l)
-            print(f"\tε: {[a.tolist() for a in eigen_values]}")
 
             # new rho and mixing
             new_rho = self.construct_rho(eigen_vectors)
@@ -150,13 +149,15 @@ class SingleAtomDFT:
             self.e_total = new_e_total
 
             print(f"\tElectrons: {self.electron_count(): .5g}\n"
-                  f"\tE_kinetic: {self.e_kin: .5g}\n"
-                  f"\tE_hartree: {self.e_hartree: .5g}\n"
-                  f"\tE_nucleus: {self.e_ext: .5g}\n"
+                  f"\tε        : {[a.tolist() for a in eigen_values]}\n"
                   f"\tE_xc     : {self.e_xc: .5g}\n"
+                  f"\tE_nucleus: {self.e_ext: .5g}\n"
+                  f"\tE_coulomb: {self.e_hartree: .5g}\n"
+                  f"\tE_kinetic: {self.e_kin: .5g}\n"
                   f"\tE_total  : {self.e_total: .5g}")
             if e_total_diff is not None:
-                print(f"\tDelta E  : {e_total_diff: .5g}")
+                print(f"\tDelta E  : {e_total_diff: .5g}\n"
+                      f"\tDelta rho: {rho_diff: .5g}")
 
             # check convergence criteria
             if i >= min_iter and rho_diff < rho_tol and e_total_diff < e_tol:
@@ -169,13 +170,3 @@ class SingleAtomDFT:
 if __name__ == "__main__":
     dft = SingleAtomDFT(1, 1e-4, 100, 3001, xc_functional=vwn_xc)
     dft.run_scf()
-
-    ref_r = np.linspace(0, 5, 1000)
-    ref_rho = np.exp(-2 * ref_r) / np.pi
-
-    fig, ax = plt.subplots()
-    ax.plot(dft.r, dft.rho)
-    ax.plot(ref_r, ref_rho)
-    ax.set(xlabel=r"r", ylabel=r"rho", xlim=[-0.1, 5.1])
-    ax.grid()
-    plt.show()
