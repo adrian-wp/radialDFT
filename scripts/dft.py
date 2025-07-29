@@ -1,3 +1,5 @@
+import time
+
 import numpy as np
 import scipy
 
@@ -66,7 +68,7 @@ class SingleAtomDFT:
         occupation = len(self.occupations[l])
 
         epsilon, y = scipy.linalg.eigh_tridiagonal(c_diagonal[:-1], c_off[:-1], select="i",
-                                                   select_range=(0, occupation - 1))
+                                                   select_range=(0, occupation - 1), lapack_driver="stebz")
 
         # transform back to chi and append zeros for boundary
         chi = np.zeros(shape=(self.r.shape[0], occupation))
@@ -168,5 +170,7 @@ class SingleAtomDFT:
 
 
 if __name__ == "__main__":
+    start = time.time()
     dft = SingleAtomDFT(1, 1e-4, 100, 3001, xc_functional=vwn_xc)
     dft.run_scf()
+    print(f"{time.time() - start:.3f}s elapsed.")

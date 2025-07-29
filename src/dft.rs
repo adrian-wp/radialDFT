@@ -31,8 +31,10 @@ pub struct Energy {
 
 pub struct DFTResult {
     pub energy: Energy,
+    pub density: Vec<f64>,
     pub orbitals: Orbitals,
     pub grid: LogGrid,
+    pub occupations: Occupations,
     pub iterations: usize,
     pub success: bool,
 }
@@ -202,7 +204,7 @@ fn get_electron_count(grid: &LogGrid, rho: &Vec<f64>) -> f64 {
 
 pub fn single_atom_dft(z: i32, r_min: f64, r_max: f64, n_grid: usize, occupations: Occupations,
                        mixing_steps: usize, max_iter: usize, min_iter: usize, e_tol: f64, rho_tol: f64,
-                       xc_functional: fn(&LogGrid, &Vec<f64>, &mut Vec<f64>) -> f64) -> DFTResult {
+                       xc_functional: fn(&LogGrid, &Vec<f64>, &mut Vec<f64>) -> f64, verbose: i32) -> DFTResult {
     // initialize grid
     // uniform grid in x from ln(r_min) to ln(r_max) with spacing h_x
     // log grid in r with r = e^x
@@ -254,24 +256,30 @@ pub fn single_atom_dft(z: i32, r_min: f64, r_max: f64, n_grid: usize, occupation
         energy.total = new_e_total;
 
         // print
-        let electron_count = get_electron_count(&grid, &rho);
-        println!("Iteration {i}:\n\
-                  \tElectrons: {:12.5}\n\
-                  \tε        : {:?}\n\
-                  \tE_xc     : {:12.5}\n\
-                  \tE_nucleus: {:12.5}\n\
-                  \tE_coulomb: {:12.5}\n\
-                  \tE_kinetic: {:12.5}\n\
-                  \tE_total  : {:12.5}",
-                 electron_count, orbitals.eigenvalues, energy.xc, energy.external, energy.hartree,
-                 energy.kinetic, energy.total);
-
+        if verbose >= 2 {
+            let electron_count = get_electron_count(&grid, &rho);
+            println!("Iteration {i}:\n\
+                     \tElectrons: {:12.5}\n\
+                     \tε        : {:?}\n\
+                     \tE_xc     : {:12.5}\n\
+                     \tE_nucleus: {:12.5}\n\
+                     \tE_coulomb: {:12.5}\n\
+                     \tE_kinetic: {:12.5}\n\
+                     \tE_total  : {:12.5}",
+                     electron_count, orbitals.eigenvalues, energy.xc, energy.external, energy.hartree,
+                     energy.kinetic, energy.total);
+        }
         // check convergence criteria
         if i > min_iter && e_total_diff < e_tol && rho_diff < rho_tol {
-            println!("Reached desired convergence. (rho = {:.5e}, E = {:.5e})", rho_diff, e_total_diff);
-            return DFTResult { energy, orbitals, grid, iterations: i, success: true };
+            if verbose >= 2 {
+                println!("Reached desired convergence. (rho = {:.5e}, E = {:.5e})", rho_diff, e_total_diff);
+            } else if verbose == 1 {
+                println!("Z = {:3}: {:4} {:12.5} {:12.5} {:12.5} {:12.5} {:12.5}    {:?}",
+                         z, i, energy.total, energy.kinetic, energy.hartree, energy.external, energy.xc, orbitals.eigenvalues);
+            }
+            return DFTResult { energy, density: rho, orbitals, grid, occupations, iterations: i, success: true };
         }
     }
-    println!("Maximum number of iterations reached.");
-    DFTResult { energy, orbitals, grid, iterations: max_iter, success: false }
+    if verbose >= 2 { println!("Maximum number of iterations reached.") };
+    DFTResult { energy, density: rho, orbitals, grid, occupations, iterations: max_iter, success: false }
 }

@@ -1,6 +1,6 @@
+use std::f64::consts;
 use crate::integrate;
 use crate::dft;
-use std::f64::consts;
 
 #[allow(dead_code)]
 pub fn slater_exchange(grid: &dft::LogGrid, rho: &Vec<f64>, v_eff: &mut Vec<f64>) -> f64 {
