@@ -16,17 +16,25 @@ pub struct LogGrid {
     pub h_x: f64,
 }
 
-struct Orbitals {
-    eigenvalues: [Vec<f64>; 4],
-    eigenvectors: [Vec<f64>; 4],
+pub struct Orbitals {
+    pub eigenvalues: [Vec<f64>; 4],
+    pub eigenvectors: [Vec<f64>; 4],
 }
 
-struct Energy {
-    external: f64,
-    hartree: f64,
-    xc: f64,
-    kinetic: f64,
-    total: f64,
+pub struct Energy {
+    pub external: f64,
+    pub hartree: f64,
+    pub xc: f64,
+    pub kinetic: f64,
+    pub total: f64,
+}
+
+pub struct DFTResult {
+    pub energy: Energy,
+    pub orbitals: Orbitals,
+    pub grid: LogGrid,
+    pub iterations: usize,
+    pub success: bool,
 }
 
 fn add_v_external(z: i32, grid: &LogGrid, rho: &Vec<f64>, v_eff: &mut Vec<f64>) -> f64 {
@@ -35,19 +43,19 @@ fn add_v_external(z: i32, grid: &LogGrid, rho: &Vec<f64>, v_eff: &mut Vec<f64>) 
         v_eff[i] += -z as f64 / grid.r[i];
     }
     // return external energy
-    let integrand = (0..grid.n).map(|i| {
+    let integrand = (0..grid.n).map(|i|
         rho[i] * grid.r[i].powi(2)
-    }).collect();
+    ).collect();
     -4.0 * consts::PI * z as f64 * integrate::simpson(&integrand, grid.h_x)
 }
 
 fn add_v_hartree(grid: &LogGrid, rho: &Vec<f64>, v_eff: &mut Vec<f64>) -> f64 {
-    let mut inner_integral = (0..grid.n).map(|i| {
+    let mut inner_integral = (0..grid.n).map(|i|
         rho[i] * grid.r[i].powi(3)
-    }).collect();
-    let mut outer_integral = (0..grid.n).map(|i| {
+    ).collect();
+    let mut outer_integral = (0..grid.n).map(|i|
         rho[i] * grid.r[i].powi(2)
-    }).rev().collect();
+    ).rev().collect();
     inner_integral = integrate::cumulative_simpson(&inner_integral, grid.h_x);
     outer_integral = integrate::cumulative_simpson(&outer_integral, grid.h_x);
     let mut integrand = vec![0.0; grid.n];
@@ -62,41 +70,51 @@ fn add_v_hartree(grid: &LogGrid, rho: &Vec<f64>, v_eff: &mut Vec<f64>) -> f64 {
 fn solve_kohn_sham(grid: &LogGrid, l: usize, v_eff: &Vec<f64>, n_shells: usize) -> (Vec<f64>, Vec<f64>) {
     // initialize stencil matrix and right side diagonal matrix B
     // omit last row for Dirichlet boundary at r_max
-    let diag = (0..grid.n - 1).map(|i| {
-        1.0 / grid.h_x.powi(2) + 1.0 / 8.0 + (l * (l + 1)) as f64 / 2.0 + grid.r[i].powi(2) * v_eff[i]
-    }).collect();
-    let off = vec![-1.0 / (2.0 * grid.h_x.powi(2)); grid.n - 1];
+    let diag = (0..grid.n - 1).map(|i|
+        1.0 / grid.h_x.powi(2) + 0.125 + 0.5 * (l * (l + 1)) as f64 + grid.r[i].powi(2) * v_eff[i]
+    ).collect();
+    let off = vec![-0.5 / grid.h_x.powi(2); grid.n - 2];
     let mut a = linalg::TridiagonalMatrix { n: grid.n - 1, diag, off };
-    // B needs N values later but the last value of a.off is ignored anyway
-    let mut b: Vec<f64> = (0..grid.n).map(|i| { grid.r[i].powi(2) }).collect();
+    let mut b: Vec<f64> = (0..grid.n - 1).map(|i| grid.r[i].powi(2)).collect();
     // Neumann BC at r_min
     a.diag[0] += l as f64 + 0.5 / grid.h_x;
     a.diag[0] /= 2.0;
     b[0] /= 2.0;
     // transform C = B^(-1/2) * A * B^(-1/2) in-place
-    for i in 0..grid.n - 1 {
+    for i in 0..grid.n - 2 {
         a.diag[i] /= b[i];
         a.off[i] /= (b[i] * b[i + 1]).sqrt();
     }
+    a.diag[grid.n - 2] /= b[grid.n - 2];
 
     // solve eigenvalue problem
-    let epsilon;
+    let mut epsilon;
     let y;
     (epsilon, y) = linalg::eigh_tridiagonal(&mut a, n_shells as i32);
 
-    // transform back from y to u, leave last value of all eigenvectors 0.0 for boundary
+    // sort eigenvalues
+    let mut sort_index = (0..n_shells).collect::<Vec<_>>();
+    sort_index.sort_by(|&a, &b| epsilon[a].partial_cmp(&epsilon[b]).unwrap());
+    epsilon = sort_index.iter().map(|&i| epsilon[i]).collect();
+
+    // sort eigenvectors and append 0.0 boundary point
     let mut u = vec![0.0; grid.n * n_shells];
-    for j in 0..n_shells {
+    for dst in 0..n_shells {
+        let src = sort_index[dst];
         for i in 0..grid.n - 1 {
-            u[j * grid.n + i] = y[j * (grid.n - 1) + i] / b[i].sqrt() * grid.r[i].sqrt();
+            // destination vectors are 1 longer than source vectors
+            let src_index = src * (grid.n - 1) + i;
+            let dst_index = dst * grid.n + i;
+            // transform back from y to u during sort
+            u[dst_index] = y[src_index] / b[i].sqrt() * grid.r[i].sqrt();
         }
     }
 
     // normalize u
     for j in 0..n_shells {
-        let integrand = (0..grid.n).map(|i| {
+        let integrand = (0..grid.n).map(|i|
             u[j * grid.n + i].powi(2) * grid.r[i]
-        }).collect();
+        ).collect();
         let norm = integrate::simpson(&integrand, grid.h_x).sqrt();
         for i in 0..grid.n {
             u[j * grid.n + i] /= norm;
@@ -119,7 +137,7 @@ fn construct_rho(grid: &LogGrid, u: &[Vec<f64>; 4], occupations: &Occupations) -
 
 fn pulay_mixing(grid: &LogGrid, densities: &mut Vec<Vec<f64>>, residuals: &mut Vec<Vec<f64>>, old_rho: &Vec<f64>, new_rho: Vec<f64>, steps: usize, i: usize) -> Vec<f64> {
     // calculate residual and save residual and density in history
-    let residual = (0..grid.n).map(|i| { new_rho[i] - old_rho[i] }).collect();
+    let residual = (0..grid.n).map(|i| new_rho[i] - old_rho[i]).collect();
     residuals[i % steps] = residual;
     densities[i % steps] = new_rho.clone();
     let mut rho = new_rho;
@@ -141,9 +159,9 @@ fn pulay_mixing(grid: &LogGrid, densities: &mut Vec<Vec<f64>>, residuals: &mut V
             for y in x..steps {
                 // vector dot product of residuals, weighted by r^3
                 let a_i = x * (steps + 1) + y;
-                a[a_i] = (0..grid.n).fold(0.0, |acc, j| {
-                    acc + grid.r[j].powi(3) * residuals[x][j] * residuals[y][j]
-                });
+                a[a_i] = (0..grid.n).fold(0.0, |acc, j|
+                    acc + grid.r[j].powi(3) * residuals[x][j] * residuals[y][j],
+                );
             }
         }
         // solve linear system, solution (i.e. coefficients) will be stored in b
@@ -169,28 +187,28 @@ fn get_kinetic_energy(grid: &LogGrid, rho: &Vec<f64>, v_eff: &Vec<f64>, eigenval
             eigenvalue_sum += occupations.f[l][n] as f64 * eigenvalues[l][n];
         }
     }
-    let integrand = (0..grid.n).map(|i| {
+    let integrand = (0..grid.n).map(|i|
         v_eff[i] * rho[i] * grid.r[i].powi(3)
-    }).collect();
+    ).collect();
     eigenvalue_sum - 4.0 * consts::PI * integrate::simpson(&integrand, grid.h_x)
 }
 
 fn get_electron_count(grid: &LogGrid, rho: &Vec<f64>) -> f64 {
-    let integrand = (0..grid.n).map(|i| {
+    let integrand = (0..grid.n).map(|i|
         rho[i] * grid.r[i].powi(3)
-    }).collect();
+    ).collect();
     4.0 * consts::PI * integrate::simpson(&integrand, grid.h_x)
 }
 
 pub fn single_atom_dft(z: i32, r_min: f64, r_max: f64, n_grid: usize, occupations: Occupations,
                        mixing_steps: usize, max_iter: usize, min_iter: usize, e_tol: f64, rho_tol: f64,
-                       xc_functional: fn(&LogGrid, &Vec<f64>, &mut Vec<f64>) -> f64) {
+                       xc_functional: fn(&LogGrid, &Vec<f64>, &mut Vec<f64>) -> f64) -> DFTResult {
     // initialize grid
     // uniform grid in x from ln(r_min) to ln(r_max) with spacing h_x
     // log grid in r with r = e^x
-    let x: Vec<f64> = (0..n_grid).map(|i| {
+    let x: Vec<f64> = (0..n_grid).map(|i|
         r_min.ln() + i as f64 / (n_grid - 1) as f64 * (r_max.ln() - r_min.ln())
-    }).collect();
+    ).collect();
     let r = x.iter().map(|&x| consts::E.powf(x)).collect();
     let h_x = (x[x.len() - 1] - x[0]) / (n_grid - 1) as f64;
     let grid = LogGrid { n: n_grid, x, r, h_x };
@@ -218,9 +236,9 @@ pub fn single_atom_dft(z: i32, r_min: f64, r_max: f64, n_grid: usize, occupation
         let new_rho = construct_rho(&grid, &orbitals.eigenvectors, &occupations);
 
         // calculate difference to previous density, then apply mixing
-        let rho_diff = (0..grid.n).fold(0.0, |diff, j| {
-            diff + (new_rho[j] - rho[j]).powi(2)
-        }).sqrt();
+        let rho_diff = (0..grid.n).fold(0.0, |diff, j|
+            diff + (new_rho[j] - rho[j]).powi(2),
+        ).sqrt();
         rho = pulay_mixing(&grid, &mut density_history, &mut residual_history, &rho, new_rho, mixing_steps, i);
 
         // get energies and new effective potential
@@ -251,8 +269,9 @@ pub fn single_atom_dft(z: i32, r_min: f64, r_max: f64, n_grid: usize, occupation
         // check convergence criteria
         if i > min_iter && e_total_diff < e_tol && rho_diff < rho_tol {
             println!("Reached desired convergence. (rho = {:.5e}, E = {:.5e})", rho_diff, e_total_diff);
-            return;
+            return DFTResult { energy, orbitals, grid, iterations: i, success: true };
         }
     }
-    println!("Maximum number of iterations reached.")
+    println!("Maximum number of iterations reached.");
+    DFTResult { energy, orbitals, grid, iterations: max_iter, success: false }
 }

@@ -20,7 +20,7 @@ pub struct TridiagonalMatrix {
     pub n: usize,
     // diagonal of tridiagonal matrix with length N
     pub diag: Vec<f64>,
-    // off diagonals of symmetric matrix, LAPACK requires length N (the last element is not used)
+    // off diagonals of symmetric matrix with length N-1
     pub off: Vec<f64>,
 }
 
@@ -29,7 +29,7 @@ pub fn solve_symmetric(ls: &mut LinearSystem, upper: bool) {
     debug_assert_eq!(ls.a.len(), ls.n.pow(2));
     debug_assert_eq!(ls.b.len(), ls.n);
     // whether the upper or lower triangle of A should be accessed
-    let uplo = if upper {b'U'} else {b'L'};
+    let uplo = if upper { b'U' } else { b'L' };
     // pivot indices that define permutation matrix P
     let mut ipiv = vec![0; ls.n];
     // workspace size and work array (not optimal but should be sufficient)
@@ -57,10 +57,90 @@ pub fn solve_symmetric(ls: &mut LinearSystem, upper: bool) {
     // no return value, the result is saved in ls.b
 }
 
+pub fn eigh_tridiagonal(a: &mut TridiagonalMatrix, iu: i32) -> (Vec<f64>, Vec<f64>) {
+    debug_assert_eq!(a.diag.len(), a.n);
+    debug_assert_eq!(a.off.len(), a.n - 1);
+    debug_assert!(a.n >= iu as usize);
+
+    // output containers W and Z for the eigenvalues and eigenvectors
+    let mut w = vec![0.0; a.n];
+    let mut z = vec![0.0; a.n * iu as usize];
+
+    // will return the number of eigenvalues found, should be iu in this case
+    let mut m = 0;
+    // returns the number of diagonal blocks in the matrix
+    let mut nsplit = [0];
+    // specifies to which block an eigenvalue belongs
+    let mut iblock = vec![0; a.n];
+    // contains the splitting points of the submatrices
+    let mut isplit = vec![0; a.n];
+
+    // workspace arrays of size 4*N and 3*N for DSTEBZ, and 5*N and N for DSTEIN
+    let mut work = vec![0.0; 5 * a.n];
+    let mut iwork = vec![0; 3 * a.n];
+    // will return 0 on success
+    let mut info = -1;
+
+    // call LAPACK, request first iu eigenvalues
+    unsafe {
+        lapack::dstebz(
+            b'I',
+            b'B',
+            a.n as i32,
+            0.0,
+            0.0,
+            1,
+            iu,
+            0.0,
+            &mut a.diag,
+            &mut a.off,
+            &mut m,
+            &mut nsplit,
+            &mut w,
+            &mut iblock,
+            &mut isplit,
+            &mut work,
+            &mut iwork,
+            &mut info,
+        );
+    }
+    assert_eq!(info, 0);
+
+    // contains the indices for which the eigenvectors failed to converge
+    let mut ifail = vec![0; iu as usize];
+
+    // get eigenvectors from LAPACK
+    unsafe {
+        lapack::dstein(
+            a.n as i32,
+            &a.diag,
+            &a.off,
+            iu,
+            &w,
+            &iblock,
+            &isplit,
+            &mut z,
+            a.n as i32,
+            &mut work,
+            &mut iwork,
+            &mut ifail,
+            &mut info,
+        );
+    }
+    assert_eq!(info, 0);
+    // we only want the first iu eigenvalues
+    w.truncate(iu as usize);
+    (w, z)
+}
+
 /// Calculates the first `iu` eigenvalues and eigenvectors of the tridiagonal matrix `a`
 /// by using LAPACKs DSTEMR. Returns two vectors, first contains the eigenvalues, the
 /// second all the eigenvectors in a single vector.
-pub fn eigh_tridiagonal(a: &mut TridiagonalMatrix, iu: i32) -> (Vec<f64>, Vec<f64>) {
+pub fn eigh_tridiagonal_mrrr(a: &mut TridiagonalMatrix, iu: i32) -> (Vec<f64>, Vec<f64>) {
+    // DSTEMR requires the off diagonal to have length N, even though the last value is not used
+    if a.off.len() == a.n - 1 {
+        a.off.push(0.0);
+    }
     debug_assert_eq!(a.diag.len(), a.n);
     debug_assert_eq!(a.off.len(), a.n);
     debug_assert!(a.n >= iu as usize);
@@ -126,8 +206,8 @@ mod tests {
     fn test_eigh() {
         let mut a = TridiagonalMatrix {
             n: 5,
-            diag: vec![1.0, 2.0, 3.0, 4.0, 5.0],
-            off: vec![0.0; 5],
+            diag: vec![5.0, 4.0, 3.0, 2.0, 1.0],
+            off: vec![0.0; 4],
         };
         let e_vals;
         let e_vecs;

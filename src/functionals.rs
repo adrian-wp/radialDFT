@@ -5,10 +5,10 @@ use std::f64::consts;
 #[allow(dead_code)]
 pub fn slater_exchange(grid: &dft::LogGrid, rho: &Vec<f64>, v_eff: &mut Vec<f64>) -> f64 {
     for i in 0..grid.n {
-        v_eff[i] += -(3.0 / consts::PI).powf(1.0 / 3.0) * rho[i].powf(1.0 / 3.0);
+        v_eff[i] += -(3.0 / consts::PI).powf(1.0 / 3.0) * rho[i].max(1e-12).powf(1.0 / 3.0);
     }
     let integrand = (0..grid.n).map(|i| {
-        rho[i].powf(4.0 / 3.0) * grid.r[i].powi(3)
+        rho[i].max(1e-12).powf(4.0 / 3.0) * grid.r[i].powi(3)
     }).collect();
     let e_x = -3.0 * consts::PI * (3.0 / consts::PI).powf(1.0 / 3.0) * integrate::simpson_unequal(&integrand, &grid.x);
     e_x
