@@ -5,4 +5,6 @@ edition = "2024"
 
 [dependencies]
 lapack = "0.20.0"
-lapack-src = { version="0.11.0", features=["openblas"]}
+lapack-src = { version = "0.11.0", features = ["openblas"] }
+toml = "0.8.23"
+serde = { version = "1.0", features = ["derive"] }
