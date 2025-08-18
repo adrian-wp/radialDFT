@@ -1,7 +1,13 @@
+//! Module containing the main code of the DFT implementation.
+//! single_atom_dft() is the main function that should be called to perform
+//! the SCF loop. All other functions are called during the SCF loop.
+
 use std::f64::consts;
 use crate::integrate;
 use crate::linalg;
 
+/// used to pass the integer occupations to the DFT function
+#[derive(Clone)]
 pub struct Occupations {
     // integer occupation number for each (l, n) e.g. [[2, 2], [4], [], []] for Oxygen
     pub f: [Vec<i32>; 4],
@@ -9,6 +15,8 @@ pub struct Occupations {
     pub max_l: usize,
 }
 
+/// contains the grid points of the log grid with n points, where the points in
+/// x are equally spaced by h_x and the real space points are r=e^x
 pub struct LogGrid {
     pub n: usize,
     pub x: Vec<f64>,
@@ -16,11 +24,13 @@ pub struct LogGrid {
     pub h_x: f64,
 }
 
+/// stores the eigenvalues and eigenvectors for each l
 pub struct Orbitals {
     pub eigenvalues: [Vec<f64>; 4],
     pub eigenvectors: [Vec<f64>; 4],
 }
 
+/// all the components of the total energy for a single iteration
 pub struct Energy {
     pub external: f64,
     pub hartree: f64,
@@ -29,6 +39,8 @@ pub struct Energy {
     pub total: f64,
 }
 
+/// the return value after the SCF loop converged, contains the energies,
+/// the density, the orbitals etc.
 pub struct DFTResult {
     pub energy: Energy,
     pub density: Vec<f64>,
@@ -39,19 +51,27 @@ pub struct DFTResult {
     pub success: bool,
 }
 
+/// alias for the function pointer used to pass the XC functionals
+pub type XCFunctional = fn(&LogGrid, &Vec<f64>, &mut Vec<f64>) -> f64;
+
+/// adds the external potential to v_eff in-place and returns the potential energy
 fn add_v_external(z: i32, grid: &LogGrid, rho: &Vec<f64>, v_eff: &mut Vec<f64>) -> f64 {
-    // add external potential to v_eff
+    // external potential
     for i in 0..grid.n {
         v_eff[i] += -z as f64 / grid.r[i];
     }
-    // return external energy
+    // external energy
     let integrand = (0..grid.n).map(|i|
         rho[i] * grid.r[i].powi(2)
     ).collect();
     -4.0 * consts::PI * z as f64 * integrate::simpson(&integrand, grid.h_x)
 }
 
+/// adds the hartree potential to v_eff and returns the hartree energy
+/// uses a Greens function approach to solve the poisson equation
 fn add_v_hartree(grid: &LogGrid, rho: &Vec<f64>, v_eff: &mut Vec<f64>) -> f64 {
+    // each point is determined from two integrals
+    // using the cumulative integration the integrals are determined for all grid points at once
     let mut inner_integral = (0..grid.n).map(|i|
         rho[i] * grid.r[i].powi(3)
     ).collect();
@@ -60,16 +80,27 @@ fn add_v_hartree(grid: &LogGrid, rho: &Vec<f64>, v_eff: &mut Vec<f64>) -> f64 {
     ).rev().collect();
     inner_integral = integrate::cumulative_simpson(&inner_integral, grid.h_x);
     outer_integral = integrate::cumulative_simpson(&outer_integral, grid.h_x);
+    // create the hartree potential and the integrand for the hartree energy
     let mut integrand = vec![0.0; grid.n];
     for i in 0..grid.n {
-        let v_hartree_i = 4.0 * consts::PI * (inner_integral[i] / grid.r[i] + outer_integral[grid.n - i - 1]);
+        // the outer integral was reversed to cumulatively integrate it from the
+        // back, it needs to be accessed in reverse to fix the order again
+        let v_hartree_i = 4.0 * consts::PI *
+            (inner_integral[i] / grid.r[i] + outer_integral[grid.n - i - 1]);
         v_eff[i] += v_hartree_i;
         integrand[i] = v_hartree_i * rho[i] * grid.r[i].powi(3);
     }
     2.0 * consts::PI * integrate::simpson(&integrand, grid.h_x)
 }
 
-fn solve_kohn_sham(grid: &LogGrid, l: usize, v_eff: &Vec<f64>, n_shells: usize) -> (Vec<f64>, Vec<f64>) {
+/// solves the Kohn-Sham equations for the specified l, grid and v_eff
+/// n_shells determines how many eigenvalues and eigenvectors are calculated
+/// they are returned in ascending order: first the eigenvalues, then all
+/// eigenvectors concatenated in a single vector
+fn solve_kohn_sham(grid: &LogGrid, l: usize, v_eff: &Vec<f64>, n_shells: usize)
+                   -> (Vec<f64>, Vec<f64>) {
+    // second-order finite differences lead to a symmetric tridiagonal matrix
+    // the equations were adjusted for the log grid r = e^x
     // initialize stencil matrix and right side diagonal matrix B
     // omit last row for Dirichlet boundary at r_max
     let diag = (0..grid.n - 1).map(|i|
@@ -82,7 +113,8 @@ fn solve_kohn_sham(grid: &LogGrid, l: usize, v_eff: &Vec<f64>, n_shells: usize) 
     a.diag[0] += l as f64 + 0.5 / grid.h_x;
     a.diag[0] /= 2.0;
     b[0] /= 2.0;
-    // transform C = B^(-1/2) * A * B^(-1/2) in-place
+    // the LAPACK function does not work with a generalized problem A * x = epsilon * B * x
+    // instead solve C * y = epsilon * y, transform C = B^(-1/2) * A * B^(-1/2) in-place
     for i in 0..grid.n - 2 {
         a.diag[i] /= b[i];
         a.off[i] /= (b[i] * b[i + 1]).sqrt();
@@ -90,9 +122,7 @@ fn solve_kohn_sham(grid: &LogGrid, l: usize, v_eff: &Vec<f64>, n_shells: usize) 
     a.diag[grid.n - 2] /= b[grid.n - 2];
 
     // solve eigenvalue problem
-    let mut epsilon;
-    let y;
-    (epsilon, y) = linalg::eigh_tridiagonal(&mut a, n_shells as i32);
+    let (mut epsilon, y) = linalg::eigh_tridiagonal(a, n_shells as i32);
 
     // sort eigenvalues
     let mut sort_index = (0..n_shells).collect::<Vec<_>>();
@@ -167,10 +197,8 @@ fn pulay_mixing(grid: &LogGrid, densities: &mut Vec<Vec<f64>>, residuals: &mut V
             }
         }
         // solve linear system, solution (i.e. coefficients) will be stored in b
-        let mut ls = linalg::LinearSystem { n: steps + 1, a, b };
-        linalg::solve_symmetric(&mut ls, false);
-        ls.b.truncate(steps);
-        let coefficients = ls.b;
+        let ls = linalg::LinearSystem { n: steps + 1, a, b };
+        let coefficients = linalg::solve_symmetric(ls, false);
         // linear superposition of densities using coefficients
         rho.fill(0.0);
         for j in 0..grid.n {
@@ -204,7 +232,7 @@ fn get_electron_count(grid: &LogGrid, rho: &Vec<f64>) -> f64 {
 
 pub fn single_atom_dft(z: i32, r_min: f64, r_max: f64, n_grid: usize, occupations: Occupations,
                        mixing_steps: usize, max_iter: usize, min_iter: usize, e_tol: f64, rho_tol: f64,
-                       xc_functional: fn(&LogGrid, &Vec<f64>, &mut Vec<f64>) -> f64, verbose: i32) -> DFTResult {
+                       xc_functional: XCFunctional, verbose: i32) -> DFTResult {
     // initialize grid
     // uniform grid in x from ln(r_min) to ln(r_max) with spacing h_x
     // log grid in r with r = e^x

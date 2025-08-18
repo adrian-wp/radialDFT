@@ -22,7 +22,7 @@ pub struct ConfigWithDefaults {
     pub densities_folder: String,
     pub use_default_occupations: bool,
     pub occupations: dft::Occupations,
-    pub functional: dft::DFTFunctional,
+    pub functional: dft::XCFunctional,
 }
 
 // These structs contain all the fields of the config toml file for deserialization
