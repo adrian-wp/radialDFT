@@ -1,19 +1,28 @@
+//! This module contains all the functionals that might be used by the DFT code.
+//! They use the same function signature, so they can be passed to the
+//! single_atom_dft() function.
+
 use std::f64::consts;
 use crate::integrate;
 use crate::dft;
 
-#[allow(dead_code)]
+/// only the slater exchange, very simple
 pub fn slater_exchange(grid: &dft::LogGrid, rho: &Vec<f64>, v_eff: &mut Vec<f64>) -> f64 {
+    // exchange potential is added to v_eff without any intermediary vector
     for i in 0..grid.n {
         v_eff[i] += -(3.0 / consts::PI).powf(1.0 / 3.0) * rho[i].max(1e-12).powf(1.0 / 3.0);
     }
+    // exchange energy's integrand
     let integrand = (0..grid.n).map(|i| {
         rho[i].max(1e-12).powf(4.0 / 3.0) * grid.r[i].powi(3)
     }).collect();
-    let e_x = -3.0 * consts::PI * (3.0 / consts::PI).powf(1.0 / 3.0) * integrate::simpson_unequal(&integrand, &grid.x);
-    e_x
+    -3.0 * consts::PI * (3.0 / consts::PI).powf(1.0 / 3.0)
+        * integrate::simpson(&integrand, grid.h_x)
 }
 
+/// VWN functionals epsilon for a single value of rs. Returns two values:
+/// first epsilon and then the derivative of epsilon with respect to rs.
+/// Based on the maple code for libxc. The derivative was derived manually.
 fn epsilon_vwn(rs: f64) -> (f64, f64) {
     // constants
     let a: f64 = 0.0310907;
@@ -36,21 +45,27 @@ fn epsilon_vwn(rs: f64) -> (f64, f64) {
     // calculate grad_epsilon_xc
     let fx_prime = 1.0 + b / (2.0 * rs.sqrt());
     let epsilon_x_prime = (3.0 / 4.0) * (3.0 / (2.0 * consts::PI)).powf(2.0 / 3.0) / rs.powi(2);
-    let epsilon_c_prime = a * ((1.0 / rs) + (f2 - 1.0) * (fx_prime / fx) - f2 / (rs - x0 * rs.sqrt())
+    let epsilon_c_prime = a * ((1.0 / rs)
+        + (f2 - 1.0) * (fx_prime / fx)
+        - f2 / (rs - x0 * rs.sqrt())
         - (f1 - f2 * f3) * q / (rs.sqrt() * (q.powi(2) + (2.0 * rs.sqrt() + b).powi(2))));
     let grad_epsilon_xc = epsilon_x_prime + epsilon_c_prime;
 
     (epsilon_xc, grad_epsilon_xc)
 }
 
+/// VWN functional LDA implementation i.e. zeta = 0 because there is no spin
+/// polarization. Implemented as described in the VWN paper: https://doi.org/10.1139/p80-159
 pub fn vwn_xc(grid: &dft::LogGrid, rho: &Vec<f64>, v_eff: &mut Vec<f64>) -> f64 {
     let mut integrand = vec![0.0; grid.n];
+    // create the integrand for the xc energy and add the xc potential
+    // to v_eff at the same time
     for i in 0..grid.n {
+        // filter out zero values
         let rho_i = rho[i].max(1e-12);
+        // formulas are based on rs not rho
         let rs = (3.0 / (4.0 * consts::PI * rho_i)).powf(1.0 / 3.0);
-        let epsilon;
-        let grad_epsilon;
-        (epsilon, grad_epsilon) = epsilon_vwn(rs);
+        let (epsilon, grad_epsilon) = epsilon_vwn(rs);
         v_eff[i] += epsilon - (rs / 3.0) * grad_epsilon;
         integrand[i] = rho_i * epsilon * grid.r[i].powi(3);
     }

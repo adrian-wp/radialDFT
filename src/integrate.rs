@@ -1,9 +1,9 @@
-//! Contains integration functions based on Simpson's 1/3 rule similar to scipy's
-//! implementations. Based on Wikipedia's "Simpson's rule" entry and
+//! Contains integration functions based on Simpson's 1/3 rule similar to
+//! scipy's implementations. Based on Wikipedia's "Simpson's rule" entry and
 //! Cartwright, Kenneth V. (September 2017) http://msme.us/2017-2-1.pdf
 
-/// Uses the composite simpson rule to integrate y(x)
-/// samples of y are equally spaced by dx
+/// Uses the composite Simpson rule to integrate y(x) where the samples in `y`
+/// are equally spaced by `dx`
 pub fn simpson(y: &Vec<f64>, dx: f64) -> f64 {
     // at least 3 entries required
     debug_assert!(y.len() >= 3);
@@ -14,16 +14,16 @@ pub fn simpson(y: &Vec<f64>, dx: f64) -> f64 {
     for i in 0..n / 2 {
         sum += y[2 * i] + 4.0 * y[2 * i + 1] + y[2 * i + 2];
     }
-    // if there is an uneven number of intervals (even number of samples) apply correction
-    // for last interval according to
+    // if there is an uneven number of intervals (even number of samples) apply
+    // correction for last interval
     if n % 2 != 0 {
         sum += 1.25 * y[n] + 2.0 * y[n - 1] - 0.25 * y[n - 2];
     }
     dx / 3.0 * sum
 }
 
-/// integrates y(x) cumulatively using Simpson's rule adding one sample at a time
-/// with an initial value of 0.0
+/// integrates y(x) cumulatively using Simpson's rule adding one sample at a
+/// time with an initial value of 0.0
 pub fn cumulative_simpson(y: &Vec<f64>, dx: f64) -> Vec<f64> {
     debug_assert!(y.len() >= 3);
     let n = y.len();
@@ -33,18 +33,21 @@ pub fn cumulative_simpson(y: &Vec<f64>, dx: f64) -> Vec<f64> {
         // h1 in scipy's source code
         res[2 * i - 1] = res[2 * i - 2]
             + dx / 3.0 * (1.25 * y[2 * i - 2] + 2.0 * y[2 * i - 1] - 0.25 * y[2 * i]);
-        // h2 in scipy's source dode
+        // h2 in scipy's source code
         res[2 * i] = res[2 * i - 1]
             + dx / 3.0 * (1.25 * y[2 * i] + 2.0 * y[2 * i - 1] - 0.25 * y[2 * i - 2]);
     }
     if n % 2 == 0 {
-        // last interval uses formula for h2
+        // last interval always uses formula for h2
+        // (if n is even the last value is not covered by the for loop)
         res[n - 1] = res[n - 2] + dx / 3.0 * (1.25 * y[n - 1] + 2.0 * y[n - 2] - 0.25 * y[n - 3]);
     }
     res
 }
 
-/// same as simpson() but for unevenly sized intervals
+/// same as simpson() but for unevenly sized intervals, `x` is a vector
+/// containing the x values of each sample y(x)
+#[allow(unused)]
 pub fn simpson_unequal(y: &Vec<f64>, x: &Vec<f64>) -> f64 {
     debug_assert!(y.len() >= 3);
     // x should be in ascending order
@@ -57,8 +60,8 @@ pub fn simpson_unequal(y: &Vec<f64>, x: &Vec<f64>) -> f64 {
     for i in 0..n / 2 {
         sum += (h[2 * i] + h[2 * i + 1]) / 6.0
             * ((2.0 - h[2 * i + 1] / h[2 * i]) * y[2 * i]
-                + (h[2 * i] + h[2 * i + 1]).powi(2) / (h[2 * i] * h[2 * i + 1]) * y[2 * i + 1]
-                + (2.0 - h[2 * i] / h[2 * i + 1]) * y[2 * i + 2]);
+            + (h[2 * i] + h[2 * i + 1]).powi(2) / (h[2 * i] * h[2 * i + 1]) * y[2 * i + 1]
+            + (2.0 - h[2 * i] / h[2 * i + 1]) * y[2 * i + 2]);
     }
     if n % 2 != 0 {
         sum += (2.0 * h[n - 1].powi(2) + 3.0 * h[n - 1] * h[n - 2]) / (6.0 * (h[n - 2] + h[n - 1]))
@@ -73,15 +76,7 @@ pub fn simpson_unequal(y: &Vec<f64>, x: &Vec<f64>) -> f64 {
 mod tests {
     use super::*;
     use std::f64::consts;
-
-    fn almost_equal_vec_f64(a: &Vec<f64>, b: &Vec<f64>, epsilon: f64) {
-        assert_eq!(a.len(), b.len());
-        for i in 0..a.len() {
-            if a[i] != b[i] {
-                assert!((a[i] - b[i]).abs() < epsilon);
-            }
-        }
-    }
+    use crate::utils;
 
     #[test]
     fn test_simpson_pow() {
@@ -143,6 +138,6 @@ mod tests {
             2.33797321e-02,
             -8.96697799e-05,
         ];
-        almost_equal_vec_f64(&result, &reference, 1e-8);
+        utils::almost_equal_vec_f64(&result, &reference, 1e-8);
     }
 }

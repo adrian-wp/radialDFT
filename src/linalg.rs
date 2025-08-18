@@ -1,5 +1,5 @@
-//! Wrappers of functions of the LAPACK library that we need for
-//! solving eigenvalue problems and systems of linear equations
+//! Wrappers of functions of the LAPACK library that we need for solving
+//! eigenvalue problems and systems of linear equations
 
 #[allow(unused_imports)]
 use lapack_src;
@@ -14,7 +14,7 @@ pub struct LinearSystem {
     pub b: Vec<f64>,
 }
 
-/// used to pass a tridiagonal matrix to the LAPACK wrapper
+/// used to pass a symmetric tridiagonal matrix to the LAPACK wrapper
 pub struct TridiagonalMatrix {
     // size of matrix NxN
     pub n: usize,
@@ -24,8 +24,10 @@ pub struct TridiagonalMatrix {
     pub off: Vec<f64>,
 }
 
-/// Solves the linear system Ax=b, the result will be contained in b.
-pub fn solve_symmetric(ls: &mut LinearSystem, upper: bool) {
+/// Solves the linear system Ax=b, where the matrix A is symmetric. Consumes
+/// the linear system `ls` and returns the solution vector. `upper` specifies
+/// whether the upper or lower triangle of the will matrix should be accessed.
+pub fn solve_symmetric(mut ls: LinearSystem, upper: bool) -> Vec<f64> {
     debug_assert_eq!(ls.a.len(), ls.n.pow(2));
     debug_assert_eq!(ls.b.len(), ls.n);
     // whether the upper or lower triangle of A should be accessed
@@ -43,21 +45,26 @@ pub fn solve_symmetric(ls: &mut LinearSystem, upper: bool) {
             uplo,
             ls.n as i32,
             1,
-            &mut ls.a,
+            ls.a.as_mut_slice(),
             ls.n as i32,
-            &mut ipiv,
-            &mut ls.b,
+            ipiv.as_mut_slice(),
+            ls.b.as_mut_slice(),
             ls.n as i32,
-            &mut work,
+            work.as_mut_slice(),
             lwork as i32,
             &mut info,
         );
     }
-    assert_eq!(info, 0);
-    // no return value, the result is saved in ls.b
+    assert_eq!(info, 0, "LAPACKs DSYSV returned non-zero info code.");
+    ls.b
 }
 
-pub fn eigh_tridiagonal(a: &mut TridiagonalMatrix, iu: i32) -> (Vec<f64>, Vec<f64>) {
+/// Calculates the first `iu` eigenvalues and eigenvectors of the symmetric
+/// tridiagonal matrix A by using LAPACKs DSTEBZ and DSTEIN. Consumes the
+/// tridiagonal matrix `a` and returns two vectors, the first contains the
+/// eigenvalues, the second all the eigenvectors concatenated in a single
+/// vector. Eigenvalues are NOT ORDERED.
+pub fn eigh_tridiagonal(mut a: TridiagonalMatrix, iu: i32) -> (Vec<f64>, Vec<f64>) {
     debug_assert_eq!(a.diag.len(), a.n);
     debug_assert_eq!(a.off.len(), a.n - 1);
     debug_assert!(a.n >= iu as usize);
@@ -92,19 +99,19 @@ pub fn eigh_tridiagonal(a: &mut TridiagonalMatrix, iu: i32) -> (Vec<f64>, Vec<f6
             1,
             iu,
             0.0,
-            &mut a.diag,
-            &mut a.off,
+            a.diag.as_mut_slice(),
+            a.off.as_mut_slice(),
             &mut m,
-            &mut nsplit,
-            &mut w,
-            &mut iblock,
-            &mut isplit,
-            &mut work,
-            &mut iwork,
+            nsplit.as_mut_slice(),
+            w.as_mut_slice(),
+            iblock.as_mut_slice(),
+            isplit.as_mut_slice(),
+            work.as_mut_slice(),
+            iwork.as_mut_slice(),
             &mut info,
         );
     }
-    assert_eq!(info, 0);
+    assert_eq!(info, 0, "LAPACKs DSTEBZ returned non-zero info code.");
 
     // contains the indices for which the eigenvectors failed to converge
     let mut ifail = vec![0; iu as usize];
@@ -113,30 +120,30 @@ pub fn eigh_tridiagonal(a: &mut TridiagonalMatrix, iu: i32) -> (Vec<f64>, Vec<f6
     unsafe {
         lapack::dstein(
             a.n as i32,
-            &a.diag,
-            &a.off,
+            a.diag.as_slice(),
+            a.off.as_slice(),
             iu,
-            &w,
-            &iblock,
-            &isplit,
-            &mut z,
+            w.as_slice(),
+            iblock.as_slice(),
+            isplit.as_slice(),
+            z.as_mut_slice(),
             a.n as i32,
-            &mut work,
-            &mut iwork,
-            &mut ifail,
+            work.as_mut_slice(),
+            iwork.as_mut_slice(),
+            ifail.as_mut_slice(),
             &mut info,
         );
     }
-    assert_eq!(info, 0);
-    // we only want the first iu eigenvalues
+    assert_eq!(info, 0, "LAPACKs DSTEIN returned non-zero info code.");
+    // we only requested iu eigenvalues
     w.truncate(iu as usize);
     (w, z)
 }
 
-/// Calculates the first `iu` eigenvalues and eigenvectors of the tridiagonal matrix `a`
-/// by using LAPACKs DSTEMR. Returns two vectors, first contains the eigenvalues, the
-/// second all the eigenvectors in a single vector.
-pub fn eigh_tridiagonal_mrrr(a: &mut TridiagonalMatrix, iu: i32) -> (Vec<f64>, Vec<f64>) {
+/// Similar to `eigh_tridiagonal` but it uses LAPACKs DSTEMR which is based on
+/// the MRRR algorithm. Eigenvalues are ordered in ascending order.
+#[allow(unused)]
+pub fn eigh_tridiagonal_mrrr(mut a: TridiagonalMatrix, iu: i32) -> (Vec<f64>, Vec<f64>) {
     // DSTEMR requires the off diagonal to have length N, even though the last value is not used
     if a.off.len() == a.n - 1 {
         a.off.push(0.0);
@@ -171,48 +178,99 @@ pub fn eigh_tridiagonal_mrrr(a: &mut TridiagonalMatrix, iu: i32) -> (Vec<f64>, V
             b'V',
             b'I',
             a.n as i32,
-            &mut a.diag,
-            &mut a.off,
+            a.diag.as_mut_slice(),
+            a.off.as_mut_slice(),
             0.0,
             0.0,
             1,
             iu,
             &mut m,
-            &mut w,
-            &mut z,
+            w.as_mut_slice(),
+            z.as_mut_slice(),
             a.n as i32,
-            &nzc,
-            &mut isuppz,
+            nzc.as_slice(),
+            isuppz.as_mut_slice(),
             &mut tryrac,
-            &mut work,
+            work.as_mut_slice(),
             lwork as i32,
-            &mut iwork,
+            iwork.as_mut_slice(),
             liwork as i32,
             &mut info,
         );
     }
     // check for success
-    assert_eq!(info, 0);
+    assert_eq!(info, 0, "LAPACKs DSTEMR returned non-zero info code.");
     // we only want the first iu eigenvalues
     w.truncate(iu as usize);
     (w, z)
 }
 
+/// some simple tests to check if the wrappers are working correctly,
+/// they are not meant to test the LAPACK algorithms
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::utils;
 
     #[test]
-    fn test_eigh() {
-        let mut a = TridiagonalMatrix {
+    fn test_solve_symmetric() {
+        let ls_upper = LinearSystem {
             n: 5,
-            diag: vec![5.0, 4.0, 3.0, 2.0, 1.0],
-            off: vec![0.0; 4],
+            a: vec![5.0, 0.0, 0.0, 0.0, 0.0,
+                    11.0, 7.0, 0.0, 0.0, 0.0,
+                    9.0, 17.0, 13.0, 0.0, 0.0,
+                    4.0, 11.0, 17.0, 12.0, 0.0,
+                    20.0, 10.0, 11.0, 14.0, 5.0],
+            b: vec![2.0, 9.0, 20.0, 13.0, 11.0],
         };
-        let e_vals;
-        let e_vecs;
-        (e_vals, e_vecs) = eigh_tridiagonal(&mut a, 5);
-        println!("{:?}", e_vals);
-        println!("{:?}", e_vecs);
+        let ls_lower = LinearSystem {
+            n: 5,
+            a: vec![5.0, 11.0, 9.0, 4.0, 20.0,
+                    0.0, 7.0, 17.0, 11.0, 10.0,
+                    0.0, 0.0, 13.0, 17.0, 11.0,
+                    0.0, 0.0, 0.0, 12.0, 14.0,
+                    0.0, 0.0, 0.0, 0.0, 5.0],
+            b: vec![2.0, 9.0, 20.0, 13.0, 11.0],
+        };
+        let reference = vec![-0.2740597, 1.61105723, 0.80288824, -0.23590904, -1.03168445];
+        let solution_upper = solve_symmetric(ls_upper, true);
+        utils::almost_equal_vec_f64(&reference, &solution_upper, 1e-6);
+        let solution_lower = solve_symmetric(ls_lower, false);
+        utils::almost_equal_vec_f64(&reference, &solution_lower, 1e-6);
+    }
+
+    #[test]
+    fn test_eigh_tridiagonal() {
+        let a = TridiagonalMatrix {
+            n: 5,
+            diag: vec![2.0, 6.0, 12.0, 12.0, 1.0],
+            off: vec![20.0, 20.0, 3.0, 1.0],
+        };
+        let ref_vals = vec![-22.25694335, 0.90346881, 6.23861442, 12.7355039];
+        let ref_vecs = vec![-0.57888644, 0.70210078, -0.41307466, 0.03621985, -0.00155738,
+                            -0.02393171, 0.00131209, 0.02359735, -0.09603019, 0.99480999,
+                            0.65912035, 0.13968785, -0.65745378, 0.33136256, 0.06325386,
+                            -0.24733648, -0.13276409, 0.20262483, 0.93477104, 0.07965325];
+        let (e_vals, e_vecs) = eigh_tridiagonal(a, 4);
+        // in this case the values are ordered but this shouldn't be assumed
+        utils::almost_equal_vec_f64(&e_vals, &ref_vals, 1e-6);
+        utils::almost_equal_vec_f64(&e_vecs, &ref_vecs, 1e-6);
+    }
+
+    #[test]
+    fn test_eigh_tridiagonal_mrrr() {
+        let a = TridiagonalMatrix {
+            n: 5,
+            diag: vec![2.0, 6.0, 12.0, 12.0, 1.0],
+            off: vec![20.0, 20.0, 3.0, 1.0],
+        };
+        let ref_vals = vec![-22.25694335, 0.90346881, 6.23861442, 12.7355039];
+        let ref_vecs = vec![-0.57888644, 0.70210078, -0.41307466, 0.03621985, -0.00155738,
+                            -0.02393171, 0.00131209, 0.02359735, -0.09603019, 0.99480999,
+                            0.65912035, 0.13968785, -0.65745378, 0.33136256, 0.06325386,
+                            -0.24733648, -0.13276409, 0.20262483, 0.93477104, 0.07965325];
+        let (e_vals, e_vecs) = eigh_tridiagonal_mrrr(a, 4);
+        utils::almost_equal_vec_f64(&e_vals, &ref_vals, 1e-6);
+        utils::almost_equal_vec_f64(&e_vecs, &ref_vecs, 1e-6);
     }
 }
