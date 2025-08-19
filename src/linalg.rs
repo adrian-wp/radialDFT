@@ -4,7 +4,7 @@
 #[allow(unused_imports)]
 use lapack_src;
 
-/// used to pass a linear system of equations to the LAPACK wrapper
+/// Used to pass a linear system of equations to the LAPACK wrapper.
 pub struct LinearSystem {
     // size N of the system
     pub n: usize,
@@ -14,7 +14,7 @@ pub struct LinearSystem {
     pub b: Vec<f64>,
 }
 
-/// used to pass a symmetric tridiagonal matrix to the LAPACK wrapper
+/// Used to pass a symmetric tridiagonal matrix to the LAPACK wrapper.
 pub struct TridiagonalMatrix {
     // size of matrix NxN
     pub n: usize,
@@ -205,8 +205,8 @@ pub fn eigh_tridiagonal_mrrr(mut a: TridiagonalMatrix, iu: i32) -> (Vec<f64>, Ve
     (w, z)
 }
 
-/// some simple tests to check if the wrappers are working correctly,
-/// they are not meant to test the LAPACK algorithms
+/// Some simple tests to check if the wrappers are working correctly. They are
+/// not meant to test the LAPACK algorithms.
 #[cfg(test)]
 mod tests {
     use super::*;

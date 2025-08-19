@@ -5,6 +5,7 @@ use crate::functionals;
 use crate::dft;
 use crate::utils;
 
+/// Represents a DFT run configuration as specified in a config.toml.
 pub struct ConfigWithDefaults {
     pub use_z_range: bool,
     pub z: i32,
@@ -25,9 +26,10 @@ pub struct ConfigWithDefaults {
     pub functional: dft::XCFunctional,
 }
 
-// These structs contain all the fields of the config toml file for deserialization
+// These structs are used to deserialize the toml file and are only used by
+// the read_config() function
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 struct Config {
     z: Option<i32>,
     z_range: Option<[i32; 2]>,
@@ -38,14 +40,14 @@ struct Config {
     output: Option<ConfigOutput>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 struct ConfigGrid {
     n: Option<usize>,
     r_min: Option<f64>,
     r_max: Option<f64>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 struct ConfigSCF {
     min_iterations: Option<usize>,
     max_iterations: Option<usize>,
@@ -54,18 +56,19 @@ struct ConfigSCF {
     rho_tol: Option<f64>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 struct ConfigOutput {
     density: Option<String>,
     energies: Option<String>,
     densities_folder: Option<String>,
 }
 
+/// Reads and parses the configuration toml file at the given path. Default
+/// values are applied if a values is not present.
 pub fn read_config(path: &str) -> ConfigWithDefaults {
     let mut file = std::fs::File::open(path).expect("Could not open config file");
     let mut toml_str = String::new();
-    file.read_to_string(&mut toml_str)
-        .expect("Could not read config file");
+    file.read_to_string(&mut toml_str).expect("Could not read config file");
     let config: Config = toml::from_str(&toml_str).expect("Could not parse config file");
 
     // check if z or z_range is present
@@ -157,6 +160,8 @@ pub fn read_config(path: &str) -> ConfigWithDefaults {
     }
 }
 
+/// Writes the energies and atomic numbers of the given DFTResults into a
+/// csv-file at the specified path.
 pub fn write_energies(path: &str, results: &Vec<dft::DFTResult>, z: &Vec<i32>) {
     debug_assert_eq!(results.len(), z.len());
     let mut file = std::fs::File::create(path).expect("Failed to create output file");
@@ -170,6 +175,7 @@ pub fn write_energies(path: &str, results: &Vec<dft::DFTResult>, z: &Vec<i32>) {
     }
 }
 
+/// Writes the grid, density and orbitals of the DFTResult into a csv file.
 pub fn write_orbitals(path: &str, result: &dft::DFTResult) {
     // verify length of all vectors
     debug_assert_eq!(result.grid.n, result.grid.r.len());

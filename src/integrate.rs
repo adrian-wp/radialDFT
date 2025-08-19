@@ -3,7 +3,7 @@
 //! Cartwright, Kenneth V. (September 2017) http://msme.us/2017-2-1.pdf
 
 /// Uses the composite Simpson rule to integrate y(x) where the samples in `y`
-/// are equally spaced by `dx`
+/// are equally spaced by `dx`.
 pub fn simpson(y: &Vec<f64>, dx: f64) -> f64 {
     // at least 3 entries required
     debug_assert!(y.len() >= 3);
@@ -22,8 +22,8 @@ pub fn simpson(y: &Vec<f64>, dx: f64) -> f64 {
     dx / 3.0 * sum
 }
 
-/// integrates y(x) cumulatively using Simpson's rule adding one sample at a
-/// time with an initial value of 0.0
+/// Integrates y(x) cumulatively using Simpson's rule adding one sample at a
+/// time with an initial value of 0.0.
 pub fn cumulative_simpson(y: &Vec<f64>, dx: f64) -> Vec<f64> {
     debug_assert!(y.len() >= 3);
     let n = y.len();
@@ -45,8 +45,8 @@ pub fn cumulative_simpson(y: &Vec<f64>, dx: f64) -> Vec<f64> {
     res
 }
 
-/// same as simpson() but for unevenly sized intervals, `x` is a vector
-/// containing the x values of each sample y(x)
+/// Same as simpson() but for unevenly sized intervals. `x` is a vector
+/// containing the x values of each sample y(x).
 #[allow(unused)]
 pub fn simpson_unequal(y: &Vec<f64>, x: &Vec<f64>) -> f64 {
     debug_assert!(y.len() >= 3);

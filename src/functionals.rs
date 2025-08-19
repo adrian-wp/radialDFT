@@ -6,7 +6,7 @@ use std::f64::consts;
 use crate::integrate;
 use crate::dft;
 
-/// only the slater exchange, very simple
+/// Only the slater exchange, very simple.
 pub fn slater_exchange(grid: &dft::LogGrid, rho: &Vec<f64>, v_eff: &mut Vec<f64>) -> f64 {
     // exchange potential is added to v_eff without any intermediary vector
     for i in 0..grid.n {

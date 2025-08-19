@@ -3,6 +3,9 @@
 
 use crate::dft;
 
+/// Returns the default occupations for the given atomic number z in the format
+/// used by the DFT code. It uses the Aufbau principle unless z is an
+/// exception where the Aufbau principle does not apply.
 pub fn default_occupation(mut z: i32) -> dft::Occupations {
     debug_assert!(0 <= z && z <= 118);
     let f = match z {
@@ -62,6 +65,8 @@ pub fn default_occupation(mut z: i32) -> dft::Occupations {
     dft::Occupations { f, max_l }
 }
 
+/// Converts a string specifying occupations into the occupations format used by
+/// the DFT code.
 pub fn resolve_occupation_string(s: &str) -> dft::Occupations {
     let mut stack: Vec<&str> = s.split_whitespace().rev().collect();
     let mut f = [vec![], vec![], vec![], vec![]];
@@ -95,7 +100,7 @@ pub fn resolve_occupation_string(s: &str) -> dft::Occupations {
     dft::Occupations { f, max_l }
 }
 
-/// used by some tests to compare two vectors of floats
+/// Used by some tests to compare two vectors of floats.
 #[allow(unused)]
 pub fn almost_equal_vec_f64(a: &Vec<f64>, b: &Vec<f64>, epsilon: f64) {
     assert_eq!(a.len(), b.len());

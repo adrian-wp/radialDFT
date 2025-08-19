@@ -9,6 +9,9 @@ mod io;
 /// calls dft::single_atom_dft() which performs the DFT calculations.
 fn main() -> std::io::Result<()> {
     let args: Vec<String> = std::env::args().collect();
+    // The two options for the arguments are specifying a config file, if the 
+    // first argument is "-c" or specifying some parameters via the arguments
+    // in that case the first argument is the atomic number z
     if args.len() <= 1 {
         // no arguments -> print help
         println!(concat!(
