@@ -131,8 +131,8 @@ pub fn read_config(path: &str) -> ConfigWithDefaults {
     let n_grid = grid_config.n.unwrap_or(3001);
     let r_min = grid_config.r_min.unwrap_or(1e-4);
     let r_max = grid_config.r_max.unwrap_or(100.0);
-    let max_iterations = scf_config.min_iterations.unwrap_or(5);
-    let min_iterations = scf_config.max_iterations.unwrap_or(100);
+    let min_iterations = scf_config.min_iterations.unwrap_or(5);
+    let max_iterations = scf_config.max_iterations.unwrap_or(100);
     let mixing_steps = scf_config.mixing_steps.unwrap_or(5);
     let e_tol = scf_config.e_tol.unwrap_or(1e-5);
     let rho_tol = scf_config.rho_tol.unwrap_or(1e-4);

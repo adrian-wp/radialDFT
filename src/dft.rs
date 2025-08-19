@@ -314,7 +314,8 @@ pub fn single_atom_dft(z: i32, r_min: f64, r_max: f64, n_grid: usize, occupation
                 success: true };
         }
     }
-    if verbose >= 2 { println!("Maximum number of iterations reached.") };
+    if verbose >= 2 { println!("Maximum number of iterations reached."); }
+    else if verbose >= 1 { println!("Z = {:3}: Maximum number of iterations reached.", z); }
     DFTResult { energy, density: rho, orbitals, grid, occupations, iterations: max_iter,
         success: false }
 }

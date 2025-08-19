@@ -1,0 +1,35 @@
+# Either z or z_range must be present. All other parameters are optional.
+# z specifies the atomic number. If z_range is specified the DFT code will be
+# run using all z from z_range[0] to z_range[1] (inclusive).
+z = 1
+z_range = [1, 92]
+# either "default" or ocupations in this format: "[He] 2s2 2p4"
+occupations = "default"
+# the XC functional, currently only supports "VWN" or "Slater"
+functional = "VWN"
+
+# the code uses a log grid with n grid points from r_min to r_max
+[grid]
+n = 3001
+r_min = 1e-4
+r_max = 100
+
+
+[scf]
+min_iterations = 5
+max_iterations = 100
+# the number of steps considered for pulay mixing
+mixing_steps = 5
+# the convergence criteria for the SCF loop, both need to be met:
+# e_tol applies to the absolute differene of the total energy and rho_tol uses
+# the norm of the difference of the new density to the previous iteration
+e_tol = 1e-5
+rho_tol = 1e-4
+
+[output]
+# path to save the final total energy and its components for each z
+energies = "energies.csv"
+# path to save the density/orbitals if only a single z is used
+density = "density.csv"
+# folder where the densities/orbitals should be saved if z_range is specified
+densities_folder = "densities/"
