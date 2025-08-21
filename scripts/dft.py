@@ -1,8 +1,6 @@
 import time
-
 import numpy as np
 import scipy
-
 from utils import generate_occupations, occupation_string
 from functionals import slater_x, vwn_xc
 
@@ -120,7 +118,7 @@ class SingleAtomDFT:
     def electron_count(self):
         return 4 * np.pi * scipy.integrate.simpson(self.rho * self.r ** 3, self.x)
 
-    def run_scf(self, e_tol=1e-5, rho_tol=1e-3, max_iter=100, min_iter=5):
+    def run_scf(self, e_tol=1e-5, rho_tol=1e-4, max_iter=100, min_iter=5):
         v_eff = np.zeros_like(self.r)
         for i in range(max_iter):
             print(f"Iteration {i}")
