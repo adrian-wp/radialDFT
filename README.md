@@ -1,18 +1,26 @@
 # RadialDFT
 
-This project implements Density Functional Theory (DFT) for an isolated atom in a vacuum allowing to obtain e.g. the electron
-density and total energy of the system. The goal of this project was for me to get a better understanding of the theory
-of DFT and to get more familiar with the Rust programming language. The code works by solving the radially symmetric
-Kohn-Sham equations
-$$ \left[ -\frac{1}{2} \frac{\mathrm{d}^2}{\mathrm{d}r^2} + \frac{l(l+1)}{2 r^2} + V_\mathrm{eff}(r) \right] u_{nl}(r) = \varepsilon_{nl} u_{nl}(r) $$
-using finite differences. It uses atomic units to simplify the equations. Currently only the VWN LDA functional[^1] is
-implemented. More information on all the equations used for the implementation can be found [here](docs/theory.md). 
+This project implements Density Functional Theory (DFT) for an isolated atom in a vacuum allowing to obtain e.g. the
+electron density and total energy of the system. The goal of this project was for me to get a better understanding of
+the theory of DFT and to get more familiar with the Rust programming language. The code works by solving the radially
+symmetric Kohn-Sham equations
 
-Similar projects can be found on gitHub [^2]\ [^3], though they don't make use of finite differences.
+$$ \left[ -\frac{1}{2} \frac{\mathrm{d}^2}{\mathrm{d}r^2} + \frac{l(l+1)}{2 r^2} + V_\mathrm{eff}(r) \right] u_{nl}(r) = \varepsilon_{nl} u_{nl}(r) $$
+
+using finite differences. It uses atomic units to simplify the equations. Currently only the VWN LDA functional[^1] is
+implemented. More information on all the equations used for the implementation can be found [here](docs/theory.md).
+
+Similar projects can be found on GitHub[^2][^3], though they are not based on finite differences.
+
+## Folder Structure
+
+The sources of the Rust implementation are in the `src` folder. An equivalent implementation in Python using numpy/scipy
+can be found in `scripts/dft.py`. It was initially used to test the derived equations. Even though scipy makes use of
+the same LAPACK routines it is significantly slower than the Rust implementation.
 
 ## Accuracy
 
-Values from NIST[^2] were used for comparison. The VWN XC functional was chosen as it is also the one used by NIST.
+Values from NIST[^4] were used for comparison. The VWN XC functional was chosen as it is also the one used by NIST.
 While the finite differences with second-order accuracy make it possible to use a very efficient eigenvalue routine from
 LAPACK for tridiagonal matrices, the accuracy is not on par with the other previously mentioned projects. This table
 shows the error of the energies in Ha for the first ten elements of the periodic table. With increasing atomic number Z,
@@ -31,11 +39,6 @@ a shooting method like Numerov's method which was also used by the other project
 |  8 | O       |  0.00358971 |  0.00313495 | 2.61340e-05 |   0.00042853 |  9.27860e-08 |
 |  9 | F       |  0.00295010 |  0.00216475 | 2.96221e-05 |   0.00075410 |  2.62305e-06 |
 | 10 | Ne      |  0.00520926 |  0.00394611 | 3.19529e-05 |   0.00122498 |  6.22485e-06 |
-
-## Folder Structure
-
-The sources of the Rust implementation are in the `src` folder. An equivalent implementation in Python with numpy/scipy
-which was used to initially test if the equations were derived correctly can be found in `scripts/dft.py`. 
 
 [^1]: https://doi.org/10.1139/p80-159
 [^2]: https://github.com/certik/dftatom
