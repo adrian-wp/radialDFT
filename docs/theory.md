@@ -1,6 +1,13 @@
 # Theory
 
+The equations in this file were mainly used as reference for the implementation and are therefore not explained in much
+detail.
+
 General Kohn-Sham equation
+
+$$ \left[ -\frac{\hbar^2}{2m} \nabla^2 + V_\mathrm{eff}(\mathbf{r}) \right] \psi_i(\mathbf{r}) = \varepsilon_i \psi_i(\mathbf{r}) $$
+
+Using atomic units
 
 $$ \left[ -\frac{1}{2} \nabla^2 + V_\mathrm{eff}(\mathbf{r}) \right] \psi_i(\mathbf{r}) = \varepsilon_i \psi_i(\mathbf{r}) $$
 
@@ -42,53 +49,81 @@ $$ \left( \frac{\mathrm{d}^2}{\mathrm{d}x^2} + \frac{\mathrm{d}}{\mathrm{d}x} \r
 
 Transformation to remove first derivative and keep stencil symmetric
 
-$$ \chi(x) = e^{-\frac{1}{2}x} \tilde u(x) \qquad \tilde u(x) = e^{\frac{1}{2}x} \chi(x) $$
-$$ \tilde u'(x) = e^{\frac{1}{2}x} \left( \chi'(x) + \frac{1}{2} \chi(x) \right) $$
-$$ \tilde u''(x) = e^{\frac{1}{2}x} \left( \chi''(x) + \chi'(x) + \frac{1}{4} \chi(x) \right) $$
-$$ -\frac{1}{2} \chi_{nl}''(x) + \left[ \frac{1}{8} + \frac{l(l+1)}{2} + e^{2x} V_\textrm{eff}(e^x) \right] \chi_{nl}(x) = e^{2x} \varepsilon_{nl} \chi_{nl}(x) $$
+$$ w(x) = e^{-\frac{1}{2}x} \tilde u(x) \qquad \tilde u(x) = e^{\frac{1}{2}x} w(x) $$
+$$ \tilde u'(x) = e^{\frac{1}{2}x} \left( w'(x) + \frac{1}{2} w(x) \right) $$
+$$ \tilde u''(x) = e^{\frac{1}{2}x} \left( w''(x) + w'(x) + \frac{1}{4} w(x) \right) $$
+$$ -\frac{1}{2} w_{nl}''(x) + \left[ \frac{1}{8} + \frac{l(l+1)}{2} + e^{2x} V_\textrm{eff}(e^x) \right] w_{nl}(x) = e^{2x} \varepsilon_{nl} w_{nl}(x) $$
 
-Boundary Conditions
+Dirichlet boundary condition on right side
 
 $$ r \rightarrow \infty \qquad u(r) \rightarrow 0 $$
+$$ w(x_\textrm{max}) = 0 $$
+
+Neumann boundary condition on left side
+
 $$ r \rightarrow 0 \qquad u(r) = C r^{l+1} = C e^{(l+1)x} $$
-$$ \tilde u'(x) = C (l+1) e^{(l+1)x} = e^{\frac{1}{2}x} \left( \chi'(x) + \frac{1}{2} \chi(x) \right) $$
-$$ \chi'(x) = C (l+1) e^{(l+\frac{1}{2})x} - \frac{1}{2} \chi(x) $$
-$$ \chi'(x_\textrm{min}) = (l + \frac{1}{2}) \chi(x_\textrm{min}) $$
+$$ \tilde u'(x) = C (l+1) e^{(l+1)x} = e^{\frac{1}{2}x} \left( w'(x) + \frac{1}{2} w(x) \right) $$
+$$ w'(x) = C (l+1) e^{(l+\frac{1}{2})x} - \frac{1}{2} w(x) $$
+$$ w'(x_\textrm{min}) = (l + \frac{1}{2}) w(x_\textrm{min}) $$
 
 ### Numerical Solution
 
-Finite Differences
+Grid (equally spaced in x, logarithmic in r)
+
+$$ x_0 = e^{r_\textrm{min}} \qquad x_{N-1} = e^{r_\textrm{max}} \qquad x_i = x_0 + i h_x $$
+$$ w_i = w(x_i)$$
+
+Finite Differences (second derivative, second-order accuracy)
+
+$$ w''(x_i) = \frac{w_{i-1} - 2 w_i + w_{i+1}}{h_x^2}$$ 
+
+Transformed radial Kohn-Sham equation as general symmetric eigenvalue problem, where A is tridiagonal and B is diagonal
+
+$$ \mathbf A \mathbf w = \varepsilon \mathbf B \mathbf w $$
+
+The tridiagonal eigenvalue solver from LAPACK does not work with a right side B
+
+$$ \mathbf C = \mathbf B^{-\frac{1}{2}} \mathbf A \mathbf B^{-\frac{1}{2}} $$
+$$ \mathbf C \mathbf y = \varepsilon \mathbf y $$
+$$ \mathbf w = \mathbf B^{-\frac{1}{2}} \mathbf y $$
 
 Greens Function
 
+...
+
 ### VWN functional
 
-libxc's implementation was used for reference[^1].
+Based on the original VWN paper[^1]. The maple code of libxc was also used as reference[^2] during implementation.
 
-No spin polarization for LDA:
+No spin polarization for LDA
 
 $$ r_s = \left( \frac{3}{4 \pi n(r)} \right)^\frac{1}{3} \qquad \zeta = \frac{n_\uparrow - n_\downarrow}{n} = 0 \qquad f(\zeta) = 0 $$
 
-Exchange part:
+Exchange part
 
 $$ \varepsilon_x(r_s, 0) = \varepsilon^\mathrm{P}_x(r_s, 0) = -\frac{3}{2}\pi \left( \frac{4}{9} \pi \right)^\frac{1}{3} r_s $$
 
-Correlation part:
+Correlation part
 
-$$ \varepsilon_c(r_s, 0) = \varepsilon^\mathrm{P}_c(r_s, 0) = A \left\{ \ln \frac{x^2}{X(x)} + \frac{2b}{Q} \arctan \frac{Q}{2x+b} - \frac{bx_0}{X(x_0)} \left[ \ln\frac{(x-x_0)^2}{X(x)} + \frac{2(b + 2x_0)}{Q} \arctan \frac{Q}{2x + b} \right] \right\} $$
+$$ \varepsilon_c(r_s, 0) = \varepsilon^\mathrm{P}_c(r_s, 0) = A \left[ \ln \frac{x^2}{X(x)} + \frac{2b}{Q} \arctan \frac{Q}{2x+b} - \frac{bx_0}{X(x_0)} \left( \ln\frac{(x-x_0)^2}{X(x)} + \frac{2(b + 2x_0)}{Q} \arctan \frac{Q}{2x + b} \right) \right] $$
 
-Helper functions:
+Derivative
+
+...
+
+Helper functions
 
 $$ x = \sqrt{r_s} \qquad X(x) = x^2 + bx + c \qquad Q = (4c - b^2)^\frac{1}{2} $$
 
-Constants (paramagnetic case):
+Constants (paramagnetic case)
 
 $$ A^\mathrm{P} = 0.0621814 \qquad x_0 = -0.10498 \qquad b = 3.72744 \qquad c = 12.9352 $$
 
-Energy and potential in radial coordinates:
+Energy and potential in radial coordinates
 
 $$ E_{xc}[n(r)] = \int_0^\infty 4 \pi r^2 n(r) \varepsilon_{xc}[n(r)] \, \mathrm{d}r $$
 $$ V_{xc}(r) = \varepsilon_{xc}[n(r)] + n(r) \frac{\mathrm{d} \varepsilon_{xc}[n(r)]}{\mathrm{d}n} \qquad \frac{\mathrm{d} \varepsilon_{xc}}{\mathrm{d}n} = \frac{\mathrm{d} \varepsilon_{xc}}{\mathrm{d} r_s} \cdot \left( -\frac{r_s}{3 n} \right) $$
 $$ V_{xc}(r_s) = \varepsilon_{xc} - \frac{r_s}{3} \frac{\mathrm{d} \varepsilon_{xc}}{\mathrm{d}r_s} $$
 
-[^1]: https://github.com/ElectronicStructureLibrary/libxc/blob/4bd0e1e36347c6d0a4e378a2c8d891ae43f8c951/maple/vwn.mpl
+[^1]: https://doi.org/10.1139/p80-159
+[^2]: https://github.com/ElectronicStructureLibrary/libxc/blob/4bd0e1e36347c6d0a4e378a2c8d891ae43f8c951/maple/vwn.mpl

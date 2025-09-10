@@ -10,10 +10,9 @@ functional = "VWN"
 
 # the code uses a log grid with n grid points from r_min to r_max
 [grid]
-n = 3001
+n = 3003
 r_min = 1e-4
 r_max = 100
-
 
 [scf]
 min_iterations = 5

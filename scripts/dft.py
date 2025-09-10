@@ -46,13 +46,13 @@ class SingleAtomDFT:
         return e_hartree, v_hartree
 
     def solve_ks(self, l, v_eff):
-        # solve generalized hermitian eigenvalue problem A * chi = epsilon * B * chi
+        # solve generalized hermitian eigenvalue problem A * w = epsilon * B * w
         # with diagonal matrix B
         a_diagonal = 1 / self.dx ** 2 + 1 / 8 + l * (l + 1) / 2 + self.r ** 2 * v_eff
         a_off = np.full(self.r.shape[0] - 1, - 1 / (2 * self.dx ** 2))
         b = self.r ** 2
 
-        # Neumann BC: chi'(x_min) = (l+1/2) * chi(x_min)
+        # Neumann BC: w'(x_min) = (l+1/2) * w(x_min)
         a_diagonal[0] += (l + 0.5) / self.dx
         a_diagonal[0] /= 2
         b[0] /= 2
@@ -68,11 +68,11 @@ class SingleAtomDFT:
         epsilon, y = scipy.linalg.eigh_tridiagonal(c_diagonal[:-1], c_off[:-1], select="i",
                                                    select_range=(0, occupation - 1), lapack_driver="stebz")
 
-        # transform back to chi and append zeros for boundary
-        chi = np.zeros(shape=(self.r.shape[0], occupation))
-        chi[:-1] = y / np.sqrt(b[:-1, np.newaxis])
+        # transform back to w and append zeros for boundary
+        w = np.zeros(shape=(self.r.shape[0], occupation))
+        w[:-1] = y / np.sqrt(b[:-1, np.newaxis])
         # transform back to u
-        u = chi * np.sqrt(self.r)[:, np.newaxis]
+        u = w * np.sqrt(self.r)[:, np.newaxis]
 
         # normalize u
         for n in range(occupation):
