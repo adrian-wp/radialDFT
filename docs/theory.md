@@ -80,6 +80,14 @@ $$ w''(x_i) = \frac{w_{i-1} - 2 w_i + w_{i+1}}{h_x^2}$$
 Transformed radial Kohn-Sham equation as general symmetric eigenvalue problem, where A is tridiagonal and B is diagonal
 
 $$ \mathbf A \mathbf w = \varepsilon \mathbf B \mathbf w $$
+$$ a_{ii} = \frac{1}{h_x^2} + \frac{1}{8} + \frac{l (l + 1)}{2} + e^{2x_i} V_\textrm{eff}(x_i) $$
+$$ a_{i-1i} = a_{i+1i} = -\frac{1}{2h_x^2} $$
+$$ b_{ii} = e^{2x_i} $$
+
+Neumann Boundary Condition (divide first row by 2 to keep A symmetric)
+
+$$ a_{00} = \frac{1}{2} \left( \frac{1}{h_x^2} + \frac{l + \frac{1}{2}}{h_x} + \frac{1}{8} + \frac{l (l + 1)}{2} + e^{2x_i} V_\textrm{eff}(x_i) \right) $$
+$$ b_{00} = \frac{1}{2} e^{2x_0} $$
 
 The tridiagonal eigenvalue solver from LAPACK does not work with a right side B
 
@@ -87,13 +95,14 @@ $$ \mathbf C = \mathbf B^{-\frac{1}{2}} \mathbf A \mathbf B^{-\frac{1}{2}} $$
 $$ \mathbf C \mathbf y = \varepsilon \mathbf y $$
 $$ \mathbf w = \mathbf B^{-\frac{1}{2}} \mathbf y $$
 
-Greens Function
+Green's Function solution for Hartree potential (integration with Simpson's rule)
 
-...
+$$ V_H(r) = \tilde V_H(x) = 4 \pi \left( e^{-x} \int_{-\infty}^x e^{3x'} \rho(e^{x'}) \, \mathrm d x' + \int_x^\infty e^{2x'} \rho(e^{x'}) \, \mathrm d x' \right)$$
 
 ### VWN functional
 
-Based on the original VWN paper[^1]. The maple code of libxc was also used as reference[^2] during implementation.
+Based on the original VWN paper[^1]. The maple code of libxc was also used as reference[^2] during implementation. The
+definition of x was taken directly from the paper and has nothing to do with the logarithmic grid.
 
 No spin polarization for LDA
 
@@ -107,13 +116,15 @@ Correlation part
 
 $$ \varepsilon_c(r_s, 0) = \varepsilon^\mathrm{P}_c(r_s, 0) = A \left[ \ln \frac{x^2}{X(x)} + \frac{2b}{Q} \arctan \frac{Q}{2x+b} - \frac{bx_0}{X(x_0)} \left( \ln\frac{(x-x_0)^2}{X(x)} + \frac{2(b + 2x_0)}{Q} \arctan \frac{Q}{2x + b} \right) \right] $$
 
-Derivative
-
-...
-
 Helper functions
 
 $$ x = \sqrt{r_s} \qquad X(x) = x^2 + bx + c \qquad Q = (4c - b^2)^\frac{1}{2} $$
+
+Derivative (could be simplified further but some repetitive expressions were replaced with helper functions in the code)
+
+$$ \varepsilon_x'(r_s) = \frac{3}{4} \left( \frac{3}{2\pi} \right)^{\frac{2}{3}} \frac{1}{r_s^2} $$
+$$ \varepsilon_c'(r_s) = A \left(\frac{1}{x^2} + \left( \frac{b x_0}{X(x_0)} - 1 \right) \frac{\tilde X'(x)}{X(x)} - \frac{b x_0}{X(x_0)} \frac{1}{x^2 - x_0 x} - \left( \frac{2b}{Q} - \frac{b x_0}{X(x_0)} \frac{2 (b + 2 x_0)}{Q} \right) \frac{Q}{x (Q^2 + (2x + b)^2)} \right) $$
+$$ \tilde X'(x) = \frac{\mathrm d X}{\mathrm d r_s} = 1 + \frac{1}{2} b r_s^{-\frac{1}{2}} = 1 + \frac{b}{2x} $$
 
 Constants (paramagnetic case)
 
