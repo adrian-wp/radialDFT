@@ -12,11 +12,11 @@ implemented. More information on all the equations the implementation was based 
 
 Similar projects for single atoms but not based on finite differences can be found on GitHub[^2][^3].
 
-<div style="text-align: center;">
+<div align="center">
 
 ![Radial distribution function and radial orbitals of Neon.](docs/neon.svg)
 
-**The electron distribution and orbitals for Neon as obtained from the DFT code compared to orbitals from Clementi and Roetti[^5].**
+**The electron distribution and orbitals for Neon as obtained from the DFT code compared to orbitals from Clementi and Roetti[^4].**
 
 </div>
 
@@ -50,7 +50,7 @@ compared to 23 second with the Python version.
 
 ## Accuracy
 
-Values from NIST[^4] were used for comparison. The VWN XC functional was chosen as it is also the one used by NIST.
+Values from NIST[^5] were used for comparison. The VWN XC functional was chosen as it is also the one used by NIST.
 While the finite differences with second-order accuracy make it possible to use a very efficient eigenvalue routine from
 LAPACK for tridiagonal matrices, the accuracy is not on par with the other previously mentioned projects. This table
 shows the error of the energies in Hartree for the first ten elements of the periodic table. With increasing atomic
@@ -73,5 +73,5 @@ switch to a shooting method like Numerov's method which was employed by the othe
 [^1]: https://doi.org/10.1139/p80-159
 [^2]: https://github.com/certik/dftatom
 [^3]: https://github.com/aromanro/DFTAtom
-[^4]: https://www.nist.gov/pml/atomic-reference-data-electronic-structure-calculations/atomic-reference-data-electronic-7
-[^5]: https://doi.org/10.1016/S0092-640X(74)80016-1
+[^4]: https://doi.org/10.1016/S0092-640X(74)80016-1
+[^5]: https://www.nist.gov/pml/atomic-reference-data-electronic-structure-calculations/atomic-reference-data-electronic-7
