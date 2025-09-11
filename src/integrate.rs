@@ -72,6 +72,7 @@ pub fn simpson_unequal(y: &Vec<f64>, x: &Vec<f64>) -> f64 {
     sum
 }
 
+/// Some simple tests that compare to reference values from scipy
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -103,40 +104,20 @@ mod tests {
 
     #[test]
     fn test_cumulative_sin() {
-        let dx = 2.0 * consts::PI / 29.0;
-        let y: Vec<f64> = (0..30).map(|i| (i as f64 * dx).sin()).collect();
+        let dx = 2.0 * consts::PI / 9.0;
+        let y: Vec<f64> = (0..10).map(|i| (i as f64 * dx).sin()).collect();
         let result = cumulative_simpson(&y, dx);
         let reference = vec![
-            0.00000000e+00,
-            2.34694019e-02,
-            9.24257182e-02,
-            2.03982539e-01,
-            3.52618056e-01,
-            5.31641111e-01,
-            7.32480679e-01,
-            9.45877707e-01,
-            1.16179630e+00,
-            1.37012104e+00,
-            1.56120628e+00,
-            1.72595008e+00,
-            1.85688004e+00,
-            1.94759014e+00,
-            1.99416251e+00,
-            1.99407123e+00,
-            1.94767715e+00,
-            1.85680136e+00,
-            1.72601674e+00,
-            1.56115476e+00,
-            1.37015502e+00,
-            1.16178144e+00,
-            9.45872736e-01,
-            7.32505242e-01,
-            5.31598104e-01,
-            3.52677497e-01,
-            2.03909445e-01,
-            9.25090485e-02,
-            2.33797321e-02,
-            -8.96697799e-05,
+            0.0,
+            0.24187315,
+            0.82750905,
+            1.49714661,
+            1.94240897,
+            1.93309851,
+            1.5021006,
+            0.82922955,
+            0.23428319,
+            -0.00758996,
         ];
         utils::almost_equal_vec_f64(&result, &reference, 1e-8);
     }

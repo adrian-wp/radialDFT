@@ -12,6 +12,14 @@ implemented. More information on all the equations the implementation was based 
 
 Similar projects for single atoms but not based on finite differences can be found on GitHub[^2][^3].
 
+<div style="text-align: center;">
+
+![Radial distribution function and radial orbitals of Neon.](docs/neon.svg)
+
+**The electron distribution and orbitals for Neon as obtained from the DFT code compared to orbitals from Clementi and Roetti[^5].**
+
+</div>
+
 ## Compilation
 
 The sources of the Rust implementation are in the `src` folder. An equivalent implementation in Python using numpy/scipy
@@ -23,14 +31,17 @@ cargo build --release
 cargo test
 ````
 
-The compiled binary is located in the `target/release` folder. In this example the `example.toml` file from the
-repository is used to calculate the densities for the first 92 elements.
+The compiled binary is located in the `target/release` folder. The `example.toml` file shows how to configure the
+settings. Alternatively command line arguments can be used to quickly get the energies or orbitals for a single Z.
+The example will calculate the densities and orbitals for the first 92 elements. A script is provided to plot them.
 ```bash
 # either use command line arguments to get the energies (in this case Z=1)
 ./target/release/RadialDFT 1
-# or run the example configuration (calculates densities for Z=1..92 and saves them in densities folder)
+# or run the example configuration (create the output folder first)
 mkdir densities
 ./target/release/RadialDFT -c example.toml
+# plot the orbitals for neon (Z=10)
+python scripts/plot.py 10
 ```
 
 The Rust version is only a bit faster than the Python version since scipy makes use of exactly the same LAPACK routines.
@@ -63,3 +74,4 @@ switch to a shooting method like Numerov's method which was employed by the othe
 [^2]: https://github.com/certik/dftatom
 [^3]: https://github.com/aromanro/DFTAtom
 [^4]: https://www.nist.gov/pml/atomic-reference-data-electronic-structure-calculations/atomic-reference-data-electronic-7
+[^5]: https://doi.org/10.1016/S0092-640X(74)80016-1
