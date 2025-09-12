@@ -23,8 +23,8 @@ Similar projects for single atoms but not based on finite differences can be fou
 ## Compilation
 
 The sources of the Rust implementation are in the `src` folder. An equivalent implementation in Python using numpy/scipy
-can be found in `scripts/dft.py`. It was initially used to test the derived equations. The rust code can be compiled by
-running the following command in the root directory of this repo.
+can be found in `scripts/dft.py`. It was initially used to test the derived equations. The Rust code can be compiled by
+running the following command in the root directory of this repository.
 ````bash
 cargo build --release
 # optionally run tests (only integration functions and LAPACK wrappers for now)
@@ -53,7 +53,7 @@ compared to 23 second with the Python version.
 Values from NIST[^5] were used for comparison. The VWN XC functional was chosen as it is also the one used by NIST.
 While the finite differences with second-order accuracy make it possible to use a very efficient eigenvalue routine from
 LAPACK for tridiagonal matrices, the accuracy is not on par with the other previously mentioned projects. This table
-shows the error of the energies in Hartree for the first ten elements of the periodic table. With increasing atomic
+shows the error of the energies in hartree for the first ten elements of the periodic table. With increasing atomic
 number Z, the error also rises. To improve the accuracy, it might be necessary to use higher-order finite differences or
 switch to a shooting method like Numerov's method which was employed by the other projects.
 

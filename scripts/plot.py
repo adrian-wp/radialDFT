@@ -56,7 +56,7 @@ if __name__ == "__main__":
         axs[1].plot(r, neon_2p * r, label="reference 2p", color="0.2", linestyle=line_styles[2])
 
 
-    axs[1].set(xlim=[-0.1, 5.1], ylabel=r"Radial orbitals $ u(r) = r \cdot R(r) $", xlabel=r"r [Bohr]")
+    axs[1].set(xlim=[-0.1, 5.1], ylabel=r"Radial orbitals $ u(r) = r \cdot R(r) $", xlabel=r"r [$a_0$]")
     axs[1].grid()
     axs[1].legend()
     plt.tight_layout()
